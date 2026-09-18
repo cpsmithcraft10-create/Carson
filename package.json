@@ -1,0 +1,17 @@
+{
+  "name": "carson-timesheets",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Timesheet app: assign day jobs to workers, workers log their hours, you approve and export.",
+  "type": "commonjs",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "setup": "node scripts/setup.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "license": "UNLICENSED"
+}

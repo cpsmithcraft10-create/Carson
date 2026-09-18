@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Manager &middot; Timesheets</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <h1>Timesheets</h1>
+      <span class="who" id="who"></span>
+      <button class="ghost small" id="signout" type="button">Sign out</button>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tab-today" aria-selected="true">Today</button>
+      <button role="tab" id="tab-approve">Approve <span id="pending-count"></span></button>
+      <button role="tab" id="tab-jobs">Give out work</button>
+      <button role="tab" id="tab-crew">Crew</button>
+      <button role="tab" id="tab-report">Reports</button>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <div id="msg" class="msg"></div>
+
+    <!-- ---------------- Today ---------------- -->
+    <section id="panel-today" role="tabpanel">
+      <div class="card">
+        <div class="navrow">
+          <button class="small" type="button" id="day-prev" aria-label="Previous day">&larr;</button>
+          <input type="date" id="day-date" style="max-width:220px" aria-label="Date">
+          <button class="small" type="button" id="day-next" aria-label="Next day">&rarr;</button>
+        </div>
+        <div class="stat-row" id="day-totals" style="margin-top:14px"></div>
+      </div>
+
+      <div class="card">
+        <h2>Work given out</h2>
+        <div id="day-jobs"></div>
+      </div>
+
+      <div class="card">
+        <h2>Hours logged</h2>
+        <div id="day-entries"></div>
+      </div>
+    </section>
+
+    <!-- ---------------- Approve ---------------- -->
+    <section id="panel-approve" role="tabpanel" hidden>
+      <div class="card">
+        <h2>Waiting for you</h2>
+        <div id="pending"></div>
+      </div>
+    </section>
+
+    <!-- ---------------- Jobs ---------------- -->
+    <section id="panel-jobs" role="tabpanel" hidden>
+      <div class="card">
+        <h2>Give work to the crew</h2>
+        <form id="job-form" class="stack">
+          <div>
+            <label for="j-title">Job</label>
+            <input id="j-title" maxlength="120" placeholder="e.g. Riverside fit-out - second floor" required>
+          </div>
+          <div class="fields two">
+            <div>
+              <label for="j-date">Day</label>
+              <input type="date" id="j-date" required>
+            </div>
+            <div>
+              <label for="j-hours">Planned hours (optional)</label>
+              <input type="number" id="j-hours" min="0" max="24" step="0.25">
+            </div>
+          </div>
+          <div>
+            <label for="j-location">Where</label>
+            <input id="j-location" maxlength="200">
+          </div>
+          <div>
+            <label for="j-notes">Instructions</label>
+            <textarea id="j-notes" maxlength="1000"></textarea>
+          </div>
+          <div>
+            <label>Who is doing it</label>
+            <div id="j-workers" class="stack"></div>
+          </div>
+          <button class="primary block" type="submit">Assign this job</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="row between" style="margin-bottom:12px">
+          <h2 style="margin:0">Assigned work</h2>
+          <div class="row">
+            <input type="date" id="jobs-from" aria-label="From">
+            <input type="date" id="jobs-to" aria-label="To">
+          </div>
+        </div>
+        <div id="job-list"></div>
+      </div>
+    </section>
+
+    <!-- ---------------- Crew ---------------- -->
+    <section id="panel-crew" role="tabpanel" hidden>
+      <div class="card">
+        <h2>Add someone to the crew</h2>
+        <form id="worker-form" class="stack">
+          <div class="fields two">
+            <div>
+              <label for="w-name">Name</label>
+              <input id="w-name" maxlength="80" required>
+            </div>
+            <div>
+              <label for="w-username">Username</label>
+              <input id="w-username" maxlength="32" autocapitalize="none" required>
+            </div>
+          </div>
+          <div class="fields three">
+            <div>
+              <label for="w-pin">Starting PIN</label>
+              <input id="w-pin" inputmode="numeric" maxlength="10" required>
+            </div>
+            <div>
+              <label for="w-rate">Hourly rate</label>
+              <input type="number" id="w-rate" min="0" step="0.01" value="0">
+            </div>
+            <div>
+              <label for="w-role">Role</label>
+              <select id="w-role">
+                <option value="worker">Worker</option>
+                <option value="admin">Manager</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label for="w-phone">Phone (optional)</label>
+            <input id="w-phone" maxlength="40">
+          </div>
+          <button class="primary block" type="submit">Add worker</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>The crew</h2>
+        <div id="crew"></div>
+      </div>
+    </section>
+
+    <!-- ---------------- Reports ---------------- -->
+    <section id="panel-report" role="tabpanel" hidden>
+      <div class="card">
+        <h2>Hours over a period</h2>
+        <div class="fields three">
+          <div>
+            <label for="r-from">From</label>
+            <input type="date" id="r-from">
+          </div>
+          <div>
+            <label for="r-to">To</label>
+            <input type="date" id="r-to">
+          </div>
+          <div>
+            <label for="r-worker">Worker</label>
+            <select id="r-worker"></select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="primary" type="button" id="r-run">Show hours</button>
+          <button type="button" id="r-week">This week</button>
+          <button type="button" id="r-last">Last week</button>
+          <a id="r-csv" class="grow" href="#" style="text-align:right">Download CSV</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Totals per worker</h2>
+        <div class="scroll-x" id="report-rows"></div>
+      </div>
+
+      <div class="card">
+        <h2>Every shift in the period</h2>
+        <div id="report-entries"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

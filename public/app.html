@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>My timesheet</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <h1>My timesheet</h1>
+      <span class="who" id="who"></span>
+      <button class="ghost small" id="signout" type="button">Sign out</button>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tab-today" aria-selected="true" aria-controls="panel-today">Today</button>
+      <button role="tab" id="tab-week" aria-selected="false" aria-controls="panel-week">My hours</button>
+      <button role="tab" id="tab-pin" aria-selected="false" aria-controls="panel-pin">PIN</button>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <div id="msg" class="msg"></div>
+
+    <!-- ---------------- Today ---------------- -->
+    <section id="panel-today" role="tabpanel" aria-labelledby="tab-today">
+      <div class="card">
+        <div class="navrow">
+          <button class="small" type="button" id="day-prev" aria-label="Previous day">&larr;</button>
+          <input type="date" id="day-date" style="max-width:220px" aria-label="Date">
+          <button class="small" type="button" id="day-next" aria-label="Next day">&rarr;</button>
+        </div>
+      </div>
+
+      <div id="running"></div>
+
+      <div class="card">
+        <h2>Jobs for this day</h2>
+        <div id="jobs"></div>
+      </div>
+
+      <div class="card">
+        <h2>Hours you have logged</h2>
+        <div id="day-entries"></div>
+        <div class="stat-row" id="day-totals" style="margin-top:14px"></div>
+      </div>
+
+      <div class="card">
+        <div class="row between" style="margin-bottom:12px">
+          <h2 style="margin:0">Add hours by hand</h2>
+          <button class="small" type="button" id="toggle-manual">Show</button>
+        </div>
+
+        <form id="manual" class="stack" hidden>
+          <div>
+            <label for="m-job">Job</label>
+            <select id="m-job"></select>
+          </div>
+          <div class="fields two">
+            <div>
+              <label for="m-start">Started</label>
+              <input type="time" id="m-start" required>
+            </div>
+            <div>
+              <label for="m-end">Finished</label>
+              <input type="time" id="m-end" required>
+            </div>
+          </div>
+          <div>
+            <label for="m-break">Unpaid break (minutes)</label>
+            <input type="number" id="m-break" min="0" max="1440" step="5" value="0">
+          </div>
+          <div>
+            <label for="m-notes">What did you do?</label>
+            <textarea id="m-notes" maxlength="1000"></textarea>
+          </div>
+          <button class="primary block" type="submit">Save hours</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ---------------- Week ---------------- -->
+    <section id="panel-week" role="tabpanel" aria-labelledby="tab-week" hidden>
+      <div class="card">
+        <div class="navrow">
+          <button class="small" type="button" id="week-prev" aria-label="Earlier week">&larr;</button>
+          <strong id="week-label" class="tiny"></strong>
+          <button class="small" type="button" id="week-next" aria-label="Later week">&rarr;</button>
+        </div>
+        <div class="stat-row" id="week-totals" style="margin-top:14px"></div>
+      </div>
+
+      <div class="card">
+        <h2>Every shift this week</h2>
+        <div id="week-entries"></div>
+      </div>
+    </section>
+
+    <!-- ---------------- PIN ---------------- -->
+    <section id="panel-pin" role="tabpanel" aria-labelledby="tab-pin" hidden>
+      <div class="card">
+        <h2>Change your PIN</h2>
+        <form id="pin-form" class="stack">
+          <div>
+            <label for="p-current">Current PIN</label>
+            <input type="password" id="p-current" inputmode="numeric" autocomplete="current-password" required>
+          </div>
+          <div>
+            <label for="p-new">New PIN (4-10 digits)</label>
+            <input type="password" id="p-new" inputmode="numeric" autocomplete="new-password" required>
+          </div>
+          <button class="primary block" type="submit">Save new PIN</button>
+        </form>
+        <p class="muted tiny">Changing your PIN signs you out on any other phone.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/worker.js"></script>
+</body>
+</html>

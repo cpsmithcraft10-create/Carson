@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sign in &middot; Timesheets</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <main class="login-page">
+    <div class="card login-card">
+      <h1>Timesheets</h1>
+      <p class="muted">Sign in to log the hours you worked today.</p>
+
+      <div id="msg" class="msg"></div>
+
+      <form id="login" class="stack" autocomplete="on">
+        <div>
+          <label for="username">Username</label>
+          <input id="username" name="username" autocomplete="username"
+                 autocapitalize="none" autocorrect="off" required>
+        </div>
+        <div>
+          <label for="pin">PIN</label>
+          <input id="pin" name="pin" type="password" inputmode="numeric"
+                 autocomplete="current-password" required>
+        </div>
+        <button class="primary block" type="submit">Sign in</button>
+      </form>
+
+      <p class="muted tiny" style="margin-bottom:0">
+        Forgotten your PIN? Ask your manager to set a new one.
+      </p>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/login.js"></script>
+</body>
+</html>
