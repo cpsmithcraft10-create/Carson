@@ -85,7 +85,7 @@ function username(value) {
 
 function pin(value) {
   const raw = typeof value === 'string' ? value.trim() : '';
-  if (!/^\d{4,10}$/.test(raw)) fail('PIN must be 4 to 10 digits');
+  if (!/^\d{4,10}$/.test(raw)) fail('The sign-in number must be 4 to 10 digits');
   return raw;
 }
 

@@ -9,7 +9,7 @@ const EDITABLE = new Set(['open', 'submitted', 'rejected']);
 
 function ownEntry(db, entryId, workerId) {
   const row = db.prepare('SELECT * FROM entries WHERE id = ? AND worker_id = ?').get(entryId, workerId);
-  if (!row) throw new HttpError(404, 'That timesheet entry was not found');
+  if (!row) throw new HttpError(404, 'Those hours were not found');
   return row;
 }
 
@@ -98,16 +98,22 @@ module.exports = [
     handler({ db, user, body }) {
       const open = db.prepare("SELECT id FROM entries WHERE worker_id = ? AND status = 'open'")
         .get(user.id);
-      if (open) throw new HttpError(409, 'You are already clocked in - finish that shift first');
+      if (open) throw new HttpError(409, 'You are already clocked in on something. Finish that one first.');
 
       const workDate = body.work_date ? v.date(body.work_date, 'Date') : today();
       const start = v.time(body.start_time, 'Start time');
       const jobId = checkJob(db, body.job_id ? v.id(body.job_id, 'Job') : null, user.id);
 
+      // A call-out that was never on anyone's list carries its own description.
+      const description = v.text(body.description, 'Job', { max: 1000 });
+      if (!jobId && !description) {
+        throw new HttpError(400, 'Pick a job from your list, or say what you are working on');
+      }
+
       const info = db.prepare(`
-        INSERT INTO entries (worker_id, job_id, work_date, start_time, status)
-        VALUES (?, ?, ?, ?, 'open')
-      `).run(user.id, jobId, workDate, start);
+        INSERT INTO entries (worker_id, job_id, work_date, start_time, description, status)
+        VALUES (?, ?, ?, ?, ?, 'open')
+      `).run(user.id, jobId, workDate, start, description);
 
       return { entry: loadEntry(db, Number(info.lastInsertRowid)) };
     },
@@ -118,7 +124,7 @@ module.exports = [
     path: '/api/my/entries/:id/clock-out',
     handler({ db, user, params, body }) {
       const entry = ownEntry(db, params.id, user.id);
-      if (entry.status !== 'open') throw new HttpError(409, 'That shift is already finished');
+      if (entry.status !== 'open') throw new HttpError(409, 'That job is already finished');
 
       const end = v.time(body.end_time, 'Finish time');
       const breakMinutes = v.integer(body.break_minutes, 'Break', {
@@ -144,7 +150,7 @@ module.exports = [
     handler({ db, user, params, body }) {
       const entry = ownEntry(db, params.id, user.id);
       if (!EDITABLE.has(entry.status)) {
-        throw new HttpError(409, 'That entry is already approved - ask your manager to reopen it');
+        throw new HttpError(409, 'The office already OK\'d these hours. Ask them to put it back if it is wrong.');
       }
 
       const workDate = body.work_date != null ? v.date(body.work_date, 'Date') : entry.work_date;
@@ -185,7 +191,7 @@ module.exports = [
     handler({ db, user, params }) {
       const entry = ownEntry(db, params.id, user.id);
       if (entry.status === 'approved') throw new HttpError(409, 'That entry is already approved');
-      if (!entry.end_time) throw new HttpError(400, 'Add a finish time before sending it in');
+      if (!entry.end_time) throw new HttpError(400, 'Put in a finish time before sending it in');
 
       db.prepare(`
         UPDATE entries
@@ -204,7 +210,7 @@ module.exports = [
     handler({ db, user, params }) {
       const entry = ownEntry(db, params.id, user.id);
       if (entry.status === 'approved') {
-        throw new HttpError(409, 'Approved entries cannot be deleted');
+        throw new HttpError(409, "Hours the office OK'd cannot be taken off");
       }
       db.prepare('DELETE FROM entries WHERE id = ?').run(entry.id);
       return { ok: true };

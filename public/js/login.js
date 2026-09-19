@@ -1,35 +1,35 @@
 'use strict';
 
-const form = document.getElementById('login');
-const msg = document.getElementById('msg');
+var form = document.getElementById('signin');
+var notice = document.getElementById('notice');
 
-function landingPage(user) {
-  return user.role === 'admin' ? '/admin.html' : '/app.html';
+function landing(user) {
+  return user.role === 'admin' ? '/office.html' : '/app.html';
 }
 
-// Already signed in? Skip straight through.
+// Already signed in? Go straight through.
 api('/api/me', { signInOnExpiry: false })
-  .then(({ user }) => { location.replace(landingPage(user)); })
-  .catch(() => {});
+  .then(function (r) { location.replace(landing(r.user)); })
+  .catch(function () { /* not signed in yet */ });
 
-form.addEventListener('submit', async (event) => {
+form.addEventListener('submit', function (event) {
   event.preventDefault();
-  const button = form.querySelector('button');
-  button.disabled = true;
-  say(msg, '');
 
-  try {
-    const { user } = await api('/api/login', {
-      method: 'POST',
-      body: {
-        username: document.getElementById('username').value,
-        pin: document.getElementById('pin').value,
-      },
-    });
-    location.replace(landingPage(user));
-  } catch (err) {
-    say(msg, err.message);
+  var button = form.querySelector('button');
+  button.disabled = true;
+  say(notice, '');
+
+  api('/api/login', {
+    method: 'POST',
+    body: {
+      username: document.getElementById('username').value,
+      pin: document.getElementById('pin').value
+    }
+  }).then(function (r) {
+    location.replace(landing(r.user));
+  }).catch(function (err) {
+    say(notice, err.message, 'bad');
     document.getElementById('pin').value = '';
     button.disabled = false;
-  }
+  });
 });

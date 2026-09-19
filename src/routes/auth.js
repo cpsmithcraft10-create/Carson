@@ -19,7 +19,7 @@ module.exports = [
 
       // Same message either way so a wrong username cannot be told from a wrong PIN.
       if (!worker || !worker.active || !auth.verifyPin(pin, worker.pin_hash)) {
-        throw new HttpError(401, 'That username and PIN did not match');
+        throw new HttpError(401, 'That name and number did not match. Try again.');
       }
 
       const token = auth.createSession(db, worker.id);
@@ -62,7 +62,7 @@ module.exports = [
 
       const row = db.prepare('SELECT pin_hash FROM workers WHERE id = ?').get(user.id);
       if (!auth.verifyPin(current, row.pin_hash)) {
-        throw new HttpError(400, 'Your current PIN is not right');
+        throw new HttpError(400, 'The number you use now is not right');
       }
 
       db.prepare('UPDATE workers SET pin_hash = ? WHERE id = ?').run(auth.hashPin(next), user.id);

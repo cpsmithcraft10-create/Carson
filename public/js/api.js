@@ -1,119 +1,220 @@
 'use strict';
 
-/** Change this to your currency code (GBP, EUR, AUD, CAD ...). */
-const CURRENCY = 'USD';
+/* Shared by the crew screen and the office screen. */
 
-/** Thin wrapper over fetch: JSON in, JSON out, errors as Error with a readable message. */
-async function api(path, { method = 'GET', body, signInOnExpiry = true } = {}) {
-  const res = await fetch(path, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+var CASH = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
 
-  if (res.status === 401 && signInOnExpiry) {
-    location.href = '/';
-    throw new Error('Signed out');
-  }
+/** JSON in, JSON out. Errors come back as an Error with a readable message. */
+function api(path, opts) {
+  opts = opts || {};
+  var signInOnExpiry = opts.signInOnExpiry !== false;
 
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
-
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-  return data;
-}
-
-/** Today's date in the browser's timezone - the crew's own clock, not the server's. */
-function todayLocal() {
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-
-function nowLocal() {
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-}
-
-function addDays(date, days) {
-  const [y, m, d] = date.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
-}
-
-function startOfWeek(date) {
-  const [y, m, d] = date.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() - ((dt.getUTCDay() + 6) % 7));
-  return dt.toISOString().slice(0, 10);
-}
-
-function formatDate(date) {
-  const [y, m, d] = date.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
-    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
+  return fetch(path, {
+    method: opts.method || 'GET',
+    headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  }).then(function (res) {
+    return res.text().then(function (text) {
+      if (res.status === 401 && signInOnExpiry) {
+        location.href = '/';
+        throw new Error('Signed out');
+      }
+      var data = text ? JSON.parse(text) : {};
+      if (!res.ok) throw new Error(data.error || 'That did not work (' + res.status + ')');
+      return data;
+    });
   });
 }
 
-function formatTime(time) {
-  if (!time) return '';
-  const [h, m] = time.split(':').map(Number);
-  const dt = new Date(2000, 0, 1, h, m);
-  return dt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+/* ------------------------------ time ------------------------------ */
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+/** Today on the crew's own phone, not the server's clock. */
+function today() {
+  var d = new Date();
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 }
 
-function money(value) {
-  return Number(value || 0).toLocaleString(undefined, { style: 'currency', currency: CURRENCY });
+function timeNow() {
+  var d = new Date();
+  return pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
+
+function mins(t) {
+  var p = String(t || '').split(':');
+  return (+p[0]) * 60 + (+p[1]);
+}
+
+/** A finish earlier than the start means the work carried past midnight. */
+function gap(start, end) {
+  var a = mins(start), b = mins(end);
+  return b >= a ? b - a : b + 1440 - a;
+}
+
+function shiftDay(date, n) {
+  var p = date.split('-').map(Number);
+  var d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function mondayOf(date) {
+  var p = date.split('-').map(Number);
+  var d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+function fullDay(date) {
+  var p = date.split('-').map(Number);
+  return new Date(Date.UTC(p[0], p[1] - 1, p[2])).toLocaleDateString(undefined, {
+    weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC'
+  });
+}
+
+function briefDay(date) {
+  var p = date.split('-').map(Number);
+  return new Date(Date.UTC(p[0], p[1] - 1, p[2])).toLocaleDateString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC'
+  });
+}
+
+function clockOf(t) {
+  if (!t) return '';
+  var p = t.split(':');
+  return new Date(2000, 0, 1, +p[0], +p[1])
+    .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+function inWords(m) {
+  var h = Math.floor(m / 60), r = m % 60, out = [];
+  if (h) out.push(h + (h === 1 ? ' hour' : ' hours'));
+  if (r || !h) out.push(r + (r === 1 ? ' minute' : ' minutes'));
+  return out.join(' ');
+}
+
+var TIME_LOOKS_RIGHT = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/* ----------------------------- building ---------------------------- */
 
 /** Builds DOM without innerHTML, so a worker's notes can never inject markup. */
-function el(tag, attrs = {}, ...children) {
-  const node = document.createElement(tag);
+function make(tag, attrs) {
+  var node = document.createElement(tag);
+  var kids = Array.prototype.slice.call(arguments, 2);
 
-  for (const [key, value] of Object.entries(attrs)) {
-    if (value == null || value === false) continue;
-    if (key === 'class') node.className = value;
-    else if (key === 'text') node.textContent = value;
-    else if (key.startsWith('on') && typeof value === 'function') {
-      node.addEventListener(key.slice(2).toLowerCase(), value);
-    } else node.setAttribute(key, value === true ? '' : value);
-  }
+  if (attrs) Object.keys(attrs).forEach(function (k) {
+    var v = attrs[k];
+    if (v == null || v === false) return;
+    if (k === 'class') node.className = v;
+    else if (k === 'text') node.textContent = v;
+    else if (k.slice(0, 2) === 'on') node.addEventListener(k.slice(2).toLowerCase(), v);
+    else node.setAttribute(k, v === true ? '' : v);
+  });
 
-  for (const child of children.flat()) {
-    if (child == null || child === false) continue;
-    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
-  }
+  kids.forEach(function put(kid) {
+    if (Array.isArray(kid)) return kid.forEach(put);
+    if (kid == null || kid === false) return;
+    node.appendChild(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  });
+
   return node;
 }
 
-function clear(node) {
+function empty(node) {
   while (node.firstChild) node.removeChild(node.firstChild);
   return node;
 }
 
-/** Replaces a node's contents, skipping the null/false that conditional children produce. */
-function fill(node, ...children) {
-  clear(node);
-  for (const child of children.flat()) {
-    if (child == null || child === false) continue;
-    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
-  }
-  return node;
+function card(title, trailing, body, footer) {
+  var head = make('div', { class: 'card-top' }, make('h2', { text: title }));
+  (trailing || []).forEach(function (n) { head.appendChild(n); });
+  var box = make('div', { class: 'card' }, head, body);
+  if (footer) box.appendChild(footer);
+  return box;
 }
 
-function say(node, message, kind = 'error') {
-  node.className = `msg ${kind}`;
+function strip(items) {
+  var live = items.filter(Boolean);
+  return make('div', { class: 'strip' + (live.length === 3 ? ' n3' : '') }, live.map(function (it) {
+    return make('div', {}, make('b', { text: it.value }), make('span', { text: it.label }));
+  }));
+}
+
+/** Quick-pick break buttons that drive a typed field. */
+function breakPicker(read, onPick) {
+  return make('div', { class: 'quickpicks' }, [0, 15, 30, 45, 60].map(function (m) {
+    return make('button', {
+      type: 'button',
+      'aria-pressed': String(read() === m),
+      onclick: function (e) {
+        onPick(m);
+        var row = e.target.parentNode.querySelectorAll('button');
+        Array.prototype.forEach.call(row, function (b) {
+          b.setAttribute('aria-pressed', String(b === e.target));
+        });
+      }
+    }, m === 0 ? 'None' : m + 'm');
+  }));
+}
+
+function say(node, message, kind) {
+  node.className = 'notice ' + (kind || 'good');
   node.textContent = message || '';
-  if (message && kind === 'ok') setTimeout(() => { if (node.textContent === message) node.textContent = ''; }, 4000);
+  if (message && kind !== 'bad') {
+    setTimeout(function () { if (node.textContent === message) node.textContent = ''; }, 6000);
+  }
 }
 
-function statusPill(status) {
-  const labels = { open: 'Running', submitted: 'Sent in', approved: 'Approved', rejected: 'Needs a fix' };
-  return el('span', { class: `pill ${status}`, text: labels[status] || status });
+var SAYS = {
+  open:      'On the clock',
+  submitted: 'Sent to the office',
+  approved:  "OK'd",
+  rejected:  'Office has a question'
+};
+
+/** One line of hours, shared by both screens. */
+function hourRow(entry, opts) {
+  opts = opts || {};
+
+  var span = clockOf(entry.start_time) + ' to ' +
+    (entry.end_time ? clockOf(entry.end_time) : 'now') +
+    (entry.break_minutes ? '  ·  ' + entry.break_minutes + ' min break' : '');
+
+  var task = entry.job_title || entry.description || 'Other work';
+
+  var middle = make('div', {},
+    opts.withName && make('div', { class: 'name', text: entry.worker_name || '' }),
+    make('div', { class: 'task' + (opts.withName ? ' sub' : ''), text: task }),
+    entry.job_location && make('div', { class: 'span', text: entry.job_location }),
+    make('div', { class: 'span', text: briefDay(entry.work_date) + '  ·  ' + span }),
+    entry.job_title && entry.description &&
+      make('div', { class: 'said', text: '“' + entry.description + '”' }),
+    make('span', { class: 'mark-state ' + entry.status, text: SAYS[entry.status] || entry.status }),
+    entry.status === 'rejected' && entry.review_note &&
+      make('div', { class: 'asked', text: 'Office asks: ' + entry.review_note }));
+
+  var right = make('div', { class: 'figure' },
+    make('b', { text: entry.end_time ? entry.hours.toFixed(2) : '—' }),
+    entry.end_time && make('small', { text: 'hours' }),
+    opts.withPay && entry.end_time && entry.hourly_rate > 0 &&
+      make('small', { text: CASH.format(entry.pay) }));
+
+  var row = make('li', {}, make('div', { class: 'tick ' + entry.status }), middle, right);
+
+  var acts = (opts.buttons || []).filter(Boolean);
+  if (acts.length) middle.appendChild(make('div', { class: 'inarow foot-actions' }, acts));
+
+  return row;
 }
 
-function hoursLabel(hours) {
-  return `${Number(hours).toFixed(2)} h`;
+function signOutButton() {
+  return make('button', {
+    class: 'out',
+    onclick: function () {
+      api('/api/logout', { method: 'POST' })
+        .catch(function () { /* going anyway */ })
+        .then(function () { location.href = '/'; });
+    }
+  }, 'Sign out');
 }

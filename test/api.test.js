@@ -235,6 +235,34 @@ test('the whole run: assign work, log hours, approve, report', async (t) => {
     assert.match(csv.data.text, /"Riverside fit-out"/);
   });
 
+  await t.test('work that was never on the list can still be clocked', async () => {
+    const nameless = await worker('/api/my/clock-in', {
+      method: 'POST',
+      body: { work_date: date, start_time: '13:00' },
+    });
+    assert.strictEqual(nameless.status, 400, 'a shift with no job and no description is refused');
+    assert.match(nameless.data.error, /say what you are working on/);
+
+    const callOut = await worker('/api/my/clock-in', {
+      method: 'POST',
+      body: { work_date: date, start_time: '13:00', description: 'Broken head at the Weaver place' },
+    });
+    assert.strictEqual(callOut.status, 200);
+    assert.strictEqual(callOut.data.entry.job_id, null);
+    assert.strictEqual(callOut.data.entry.description, 'Broken head at the Weaver place');
+
+    const out = await worker(`/api/my/entries/${callOut.data.entry.id}/clock-out`, {
+      method: 'POST',
+      body: { end_time: '15:00', break_minutes: 0 },
+    });
+    assert.strictEqual(out.status, 200);
+    assert.strictEqual(out.data.entry.hours, 2);
+    assert.strictEqual(out.data.entry.description, 'Broken head at the Weaver place',
+      'clocking out without notes keeps what the job was');
+
+    await worker(`/api/my/entries/${callOut.data.entry.id}`, { method: 'DELETE' });
+  });
+
   await t.test('a mistyped finish time is caught, a real night shift is not', async () => {
     const typo = await worker('/api/my/entries', {
       method: 'POST',
@@ -338,5 +366,5 @@ test('static files never escape the public directory', async (t) => {
 
   const home = await fetch(`${app.base}/`);
   assert.strictEqual(home.status, 200);
-  assert.match(await home.text(), /Timesheets/);
+  assert.match(await home.text(), /Crew hours/);
 });

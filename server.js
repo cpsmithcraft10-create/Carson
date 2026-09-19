@@ -114,9 +114,9 @@ if (require.main === module) {
   const server = createServer(db);
   server.listen(port, host, () => {
     const admins = db.prepare("SELECT COUNT(*) AS n FROM workers WHERE role = 'admin'").get().n;
-    console.log(`Timesheets running on http://localhost:${port}`);
+    console.log(`Crew hours running on http://localhost:${port}`);
     if (admins === 0) {
-      console.log('No manager account yet - run "npm run setup" to create one.');
+      console.log('No office account yet - run "npm run setup" to make one.');
     }
   });
 

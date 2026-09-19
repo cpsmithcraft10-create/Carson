@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>My hours</title>
+  <title>Office &middot; Crew hours</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@600;700&family=Source+Sans+3:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="/css/styles.css">
@@ -27,6 +27,13 @@
       <span class="me" id="me"></span>
       <span id="signout"></span>
     </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tab-day" aria-selected="true">The day</button>
+      <button role="tab" id="tab-waiting">Waiting on you <span id="waiting-count"></span></button>
+      <button role="tab" id="tab-work">Give out work</button>
+      <button role="tab" id="tab-crew">The crew</button>
+      <button role="tab" id="tab-pay">Payroll</button>
+    </nav>
   </header>
 
   <main id="sheet" class="sheet">
@@ -34,6 +41,6 @@
   </main>
 
   <script src="/js/api.js"></script>
-  <script src="/js/worker.js"></script>
+  <script src="/js/office.js"></script>
 </body>
 </html>

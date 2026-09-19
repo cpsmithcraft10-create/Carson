@@ -8,13 +8,13 @@ const { ENTRY_SELECT, ENTRY_ORDER, shape, totals } = require('../entries');
 
 function getWorker(db, id) {
   const worker = db.prepare('SELECT * FROM workers WHERE id = ?').get(id);
-  if (!worker) throw new HttpError(404, 'Worker not found');
+  if (!worker) throw new HttpError(404, 'Nobody by that name');
   return worker;
 }
 
 function getEntry(db, id) {
   const entry = db.prepare('SELECT * FROM entries WHERE id = ?').get(id);
-  if (!entry) throw new HttpError(404, 'Timesheet entry not found');
+  if (!entry) throw new HttpError(404, 'Those hours were not found');
   return entry;
 }
 
@@ -38,7 +38,7 @@ function review(status) {
   return function handler({ db, user, params, body }) {
     const entry = getEntry(db, params.id);
     if (entry.status === 'open') {
-      throw new HttpError(409, 'That shift is still running - it has not been sent in yet');
+      throw new HttpError(409, 'They are still on the clock. Nothing has been sent in yet.');
     }
     const note = v.text(body.note, 'Note', { max: 500 });
 
@@ -152,7 +152,7 @@ module.exports = [
       const phone = v.text(body.phone, 'Phone', { max: 40 });
 
       const taken = db.prepare('SELECT id FROM workers WHERE username = ? COLLATE NOCASE').get(username);
-      if (taken) throw new HttpError(409, 'That username is already taken');
+      if (taken) throw new HttpError(409, 'Somebody already signs in with that name');
 
       const info = db.prepare(`
         INSERT INTO workers (name, username, pin_hash, role, hourly_rate, phone)
@@ -185,7 +185,7 @@ module.exports = [
         const admins = db
           .prepare("SELECT COUNT(*) AS n FROM workers WHERE role = 'admin' AND active = 1 AND id != ?")
           .get(worker.id).n;
-        if (admins === 0) throw new HttpError(409, 'This is the last manager account - keep it active');
+        if (admins === 0) throw new HttpError(409, 'This is the last office account - keep it working');
       }
       if (worker.id === user.id && !active) {
         throw new HttpError(409, 'You cannot deactivate your own account');
@@ -448,8 +448,9 @@ module.exports = [
 
       const { entries } = reportRows(db, from, to, workerId);
 
-      const header = ['Date', 'Worker', 'Job', 'Location', 'Start', 'Finish', 'Break (min)',
-                      'Hours', 'Rate', 'Pay', 'Status', 'Notes', 'Manager note'];
+      const header = ['Day', 'Name', 'Job', 'Where', 'Started', 'Finished', 'Break (min)',
+                      'Hours', 'Rate', 'Pay', 'Where it is at', 'What they said',
+                      'What the office asked'];
 
       const lines = [header.map(csvCell).join(',')];
       for (const e of entries) {
@@ -463,7 +464,7 @@ module.exports = [
       const body = `﻿${lines.join('\r\n')}\r\n`;
       res.writeHead(200, {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="timesheets-${from}-to-${to}.csv"`,
+        'Content-Disposition': `attachment; filename="hours-${from}-to-${to}.csv"`,
         'Content-Length': Buffer.byteLength(body),
       });
       res.end(body);

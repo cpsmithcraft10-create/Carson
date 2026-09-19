@@ -1,8 +1,8 @@
 {
-  "name": "carson-timesheets",
+  "name": "crew-hours",
   "version": "1.0.0",
   "private": true,
-  "description": "Timesheet app: assign day jobs to workers, workers log their hours, you approve and export.",
+  "description": "Hours for an irrigation, drainage and lighting crew: the office gives out jobs, the crew clock them, the office OKs the hours and runs payroll.",
   "type": "commonjs",
   "main": "server.js",
   "engines": {

@@ -1,351 +1,426 @@
 'use strict';
 
-const msg = document.getElementById('msg');
-const state = { date: todayLocal(), weekStart: startOfWeek(todayLocal()), day: null };
+/* The crew screen. One person, one day at a time. */
 
-/* ------------------------------------------------------------------ tabs */
+var view = {
+  me: null,
+  day: today(),
+  jobs: [],
+  entries: [],
+  running: null,
+  week: null,
+  closing: false,
+  byHand: false,
+  offList: false,
+  pin: false,
+  notice: null
+};
 
-const TABS = ['today', 'week', 'pin'];
+/* ------------------------------ loading ---------------------------- */
 
-function showTab(name) {
-  for (const tab of TABS) {
-    document.getElementById(`tab-${tab}`).setAttribute('aria-selected', String(tab === name));
-    document.getElementById(`panel-${tab}`).hidden = tab !== name;
-  }
-  if (name === 'week') loadWeek();
+function load() {
+  return Promise.all([
+    api('/api/my/day?date=' + view.day),
+    api('/api/my/entries?from=' + mondayOf(view.day) + '&to=' + shiftDay(mondayOf(view.day), 6))
+  ]).then(function (both) {
+    view.jobs = both[0].jobs;
+    view.entries = both[0].entries;
+    view.running = both[0].running;
+    view.dayTotals = both[0].totals;
+    view.week = both[1];
+    paint();
+  }).catch(function (err) {
+    flash(err.message, 'bad');
+  });
 }
 
-for (const tab of TABS) {
-  document.getElementById(`tab-${tab}`).addEventListener('click', () => showTab(tab));
+function flash(message, kind) {
+  view.notice = message ? { message: message, kind: kind || 'good' } : null;
+  paint();
 }
 
-document.getElementById('signout').addEventListener('click', async () => {
-  await api('/api/logout', { method: 'POST' }).catch(() => {});
-  location.href = '/';
-});
-
-/* ------------------------------------------------------- the running shift */
-
-function renderRunning(entry) {
-  const host = clear(document.getElementById('running'));
-  if (!entry) return;
-
-  const card = el('div', { class: 'card' },
-    el('div', { class: 'row between' },
-      el('div', { class: 'grow' },
-        el('h3', { text: entry.job_title || 'Shift in progress' }),
-        el('p', { class: 'muted tiny', text: `Started ${formatTime(entry.start_time)} on ${formatDate(entry.work_date)}` }),
-      ),
-      statusPill('open'),
-    ),
-    el('div', { class: 'fields two', style: 'margin:12px 0' },
-      el('div', {},
-        el('label', { for: 'stop-break', text: 'Unpaid break (minutes)' }),
-        el('input', { type: 'number', id: 'stop-break', min: '0', max: '1440', step: '5', value: '0' }),
-      ),
-      el('div', {},
-        el('label', { for: 'stop-time', text: 'Finish time' }),
-        el('input', { type: 'time', id: 'stop-time', value: nowLocal() }),
-      ),
-    ),
-    el('div', {},
-      el('label', { for: 'stop-notes', text: 'What did you get done?' }),
-      el('textarea', { id: 'stop-notes', maxlength: '1000' }, entry.description || ''),
-    ),
-    el('button', {
-      class: 'primary big-action',
-      style: 'margin-top:12px',
-      type: 'button',
-      onclick: () => clockOut(entry.id),
-    }, 'Finish shift'),
-  );
-
-  host.append(card);
+function after(promise, message) {
+  return promise.then(function () {
+    view.notice = message ? { message: message, kind: 'good' } : null;
+    return load();
+  }).catch(function (err) {
+    flash(err.message, 'bad');
+  });
 }
 
-async function clockOut(entryId) {
-  try {
-    await api(`/api/my/entries/${entryId}/clock-out`, {
-      method: 'POST',
-      body: {
-        end_time: document.getElementById('stop-time').value,
-        break_minutes: Number(document.getElementById('stop-break').value || 0),
-        description: document.getElementById('stop-notes').value,
-      },
-    });
-    say(msg, 'Shift saved and sent to your manager.', 'ok');
-    await loadDay();
-  } catch (err) {
-    say(msg, err.message);
-  }
-}
+/* ------------------------------ painting --------------------------- */
 
-async function clockIn(jobId) {
-  try {
-    await api('/api/my/clock-in', {
-      method: 'POST',
-      body: { job_id: jobId, work_date: state.date, start_time: nowLocal() },
-    });
-    say(msg, 'Clocked in. Tap "Finish shift" when you are done.', 'ok');
-    await loadDay();
-  } catch (err) {
-    say(msg, err.message);
-  }
-}
+function paint() {
+  var sheet = empty(document.getElementById('sheet'));
 
-/* --------------------------------------------------------- jobs of the day */
+  sheet.appendChild(make('div', { class: 'daybar' },
+    make('button', { class: 'line', 'aria-label': 'Day before',
+      onclick: function () { goDay(shiftDay(view.day, -1)); } }, '‹'),
+    make('h1', {}, fullDay(view.day),
+      view.day !== today() && make('em', { text: 'not today — tap the arrow to come back' })),
+    make('button', { class: 'line', 'aria-label': 'Day after',
+      onclick: function () { goDay(shiftDay(view.day, 1)); } }, '›')));
 
-function renderJobs(jobs, running) {
-  const host = clear(document.getElementById('jobs'));
-
-  if (jobs.length === 0) {
-    host.append(el('p', { class: 'empty', text: 'Nothing assigned for this day. You can still add hours by hand below.' }));
-    return;
+  if (view.notice) {
+    sheet.appendChild(make('div', { class: 'notice ' + view.notice.kind, text: view.notice.message }));
   }
 
-  const list = el('ul', { class: 'list' });
+  if (view.running) sheet.appendChild(liveCard(view.running));
 
-  for (const job of jobs) {
-    list.append(el('li', {},
-      el('h3', { text: job.title }),
-      job.location && el('p', { class: 'muted tiny', text: job.location }),
-      job.notes && el('p', { class: 'tiny', text: job.notes }),
-      job.scheduled_hours && el('p', { class: 'muted tiny', text: `Planned: ${job.scheduled_hours} h` }),
-      el('button', {
-        class: 'primary small',
-        type: 'button',
-        style: 'margin-top:8px',
-        disabled: !!running,
-        onclick: () => clockIn(job.id),
-      }, running ? 'Finish your current shift first' : 'Start now'),
-    ));
+  sheet.appendChild(jobsCard());
+  sheet.appendChild(myDayCard());
+  sheet.appendChild(byHandCard());
+  sheet.appendChild(weekCard());
+  sheet.appendChild(pinCard());
+}
+
+function goDay(d) {
+  view.day = d;
+  view.notice = null;
+  view.closing = false;
+  view.byHand = false;
+  view.offList = false;
+  load();
+}
+
+function liveCard(entry) {
+  var box = make('div', { class: 'live' },
+    make('span', { class: 'flag' }, make('span', { class: 'blip' }), 'On the clock'),
+    make('h3', { text: entry.job_title || entry.description || 'Work in progress' }),
+    entry.job_location && make('p', { class: 'addr', text: entry.job_location }),
+    make('p', { class: 'ticker', id: 'ticker', text: inWords(gap(entry.start_time, timeNow())) }),
+    make('p', { class: 'since' },
+      'Started at ' + clockOf(entry.start_time),
+      make('button', { class: 'link', onclick: function () { fixStart(entry); } }, 'change')));
+
+  if (!view.closing) {
+    box.appendChild(make('button', {
+      class: 'stop', onclick: function () { view.closing = true; paint(); }
+    }, "I'm done"));
+    box.appendChild(make('button', {
+      class: 'line', style: 'width:100%',
+      onclick: function () {
+        if (!confirm('Throw this away? No hours get counted.')) return;
+        after(api('/api/my/entries/' + entry.id, { method: 'DELETE' }),
+          'Thrown away. Nothing was counted.');
+      }
+    }, 'I started the wrong job'));
+    return box;
   }
 
-  host.append(list);
+  var finish = make('input', { type: 'time', id: 'finish-at', value: timeNow() });
+  var brk = make('input', { type: 'number', id: 'finish-break', min: '0', max: '600', step: '5', value: '30' });
+  var said = make('textarea', { id: 'finish-note', maxlength: '600',
+    placeholder: 'Zone 3 valve replaced, tested all six zones.' },
+    entry.job_title ? (entry.description || '') : '');
+
+  box.appendChild(make('div', { class: 'pair', style: 'margin:16px 0 14px' },
+    make('div', {}, make('label', { for: 'finish-at', text: 'What time did you finish?' }), finish),
+    make('div', {},
+      make('label', { for: 'finish-break', text: 'Break, in minutes' }), brk,
+      make('div', { style: 'margin-top:9px' },
+        breakPicker(function () { return +brk.value || 0; },
+          function (m) { brk.value = String(m); })))));
+
+  box.appendChild(make('div', { class: 'field' },
+    make('label', { for: 'finish-note', text: 'What did you get done? (can be left empty)' }), said));
+
+  box.appendChild(make('button', {
+    class: 'stop',
+    onclick: function () {
+      after(api('/api/my/entries/' + entry.id + '/clock-out', {
+        method: 'POST',
+        body: {
+          end_time: finish.value,
+          break_minutes: +brk.value || 0,
+          description: said.value.trim() || (entry.job_title ? null : entry.description)
+        }
+      }), 'Sent to the office.').then(function () { view.closing = false; paint(); });
+    }
+  }, 'Send my hours in'));
+
+  box.appendChild(make('button', {
+    class: 'line', style: 'width:100%',
+    onclick: function () { view.closing = false; paint(); }
+  }, 'Go back — still working'));
+
+  return box;
 }
 
-/* ------------------------------------------------------------- my entries */
+function fixStart(entry) {
+  var asked = prompt('What time did you actually start? Use 24 hour time, like 07:30', entry.start_time);
+  if (asked === null) return;
+  asked = asked.trim();
 
-function entryLine(entry, { editable }) {
-  const detail = [
-    formatTime(entry.start_time),
-    entry.end_time ? formatTime(entry.end_time) : 'running',
-  ].join(' - ');
+  if (!TIME_LOOKS_RIGHT.test(asked)) { flash('Times go in like 07:30 or 14:05.', 'bad'); return; }
 
-  const parts = el('li', {},
-    el('div', { class: 'entry-head' },
-      el('div', { class: 'grow' },
-        el('strong', { text: entry.job_title || 'General work' }),
-        el('div', { class: 'muted tiny', text: `${formatDate(entry.work_date)} · ${detail}` +
-          (entry.break_minutes ? ` · ${entry.break_minutes} min break` : '') }),
-      ),
-      el('span', { class: 'entry-hours', text: entry.end_time ? hoursLabel(entry.hours) : '' }),
-    ),
-    el('div', { class: 'row', style: 'margin-top:6px' }, statusPill(entry.status)),
-    entry.description && el('p', { class: 'tiny', style: 'margin:6px 0 0', text: entry.description }),
-    entry.status === 'rejected' && entry.review_note
-      && el('p', { class: 'msg error', style: 'margin:8px 0 0', text: `Manager: ${entry.review_note}` }),
-  );
-
-  if (editable && entry.status !== 'approved' && entry.end_time) {
-    parts.append(el('div', { class: 'row', style: 'margin-top:8px' },
-      el('button', { class: 'small', type: 'button', onclick: () => editEntry(entry) }, 'Edit'),
-      el('button', { class: 'small danger', type: 'button', onclick: () => removeEntry(entry) }, 'Delete'),
-    ));
-  }
-
-  return parts;
+  after(api('/api/my/entries/' + entry.id, { method: 'PATCH', body: { start_time: asked } }),
+    'Start time changed to ' + clockOf(asked) + '.');
 }
 
-async function editEntry(entry) {
-  const start = prompt('Start time (HH:MM)', entry.start_time);
-  if (start === null) return;
-  const end = prompt('Finish time (HH:MM)', entry.end_time || '');
-  if (end === null) return;
-  const breakMinutes = prompt('Unpaid break in minutes', String(entry.break_minutes));
-  if (breakMinutes === null) return;
-  const description = prompt('Notes', entry.description || '');
-  if (description === null) return;
+function jobsCard() {
+  var body;
 
-  try {
-    await api(`/api/my/entries/${entry.id}`, {
-      method: 'PATCH',
-      body: {
-        start_time: start.trim(),
-        end_time: end.trim(),
-        break_minutes: Number(breakMinutes) || 0,
-        description,
-      },
-    });
-    say(msg, 'Updated and sent back to your manager.', 'ok');
-    await refresh();
-  } catch (err) {
-    say(msg, err.message);
-  }
-}
-
-async function removeEntry(entry) {
-  if (!confirm('Delete these hours?')) return;
-  try {
-    await api(`/api/my/entries/${entry.id}`, { method: 'DELETE' });
-    say(msg, 'Deleted.', 'ok');
-    await refresh();
-  } catch (err) {
-    say(msg, err.message);
-  }
-}
-
-function renderTotals(host, totals, { showPay = false } = {}) {
-  fill(host,
-    el('div', { class: 'stat' }, el('b', { text: hoursLabel(totals.hours) }), el('span', { text: 'Hours' })),
-    el('div', { class: 'stat' }, el('b', { text: hoursLabel(totals.approved_hours) }), el('span', { text: 'Approved' })),
-    el('div', { class: 'stat' }, el('b', { text: String(totals.pending) }), el('span', { text: 'Waiting' })),
-    showPay && el('div', { class: 'stat' }, el('b', { text: money(totals.pay) }), el('span', { text: 'Est. pay' })),
-  );
-}
-
-/* ---------------------------------------------------------------- loading */
-
-async function loadDay() {
-  const data = await api(`/api/my/day?date=${state.date}`);
-  state.day = data;
-
-  renderRunning(data.running);
-  renderJobs(data.jobs, data.running);
-
-  const host = clear(document.getElementById('day-entries'));
-  if (data.entries.length === 0) {
-    host.append(el('p', { class: 'empty', text: 'No hours logged for this day yet.' }));
+  if (!view.jobs.length) {
+    body = make('div', { class: 'pad' },
+      make('p', { class: 'none', text: 'Nothing on your list for this day.' }));
   } else {
-    const list = el('ul', { class: 'list' });
-    for (const entry of data.entries) list.append(entryLine(entry, { editable: true }));
-    host.append(list);
+    body = make('ul', { class: 'rows' }, view.jobs.map(function (job) {
+      var already = view.entries
+        .filter(function (e) { return e.job_id === job.id && e.status !== 'rejected'; })
+        .reduce(function (t, e) { return t + e.hours; }, 0);
+
+      return make('li', { style: 'grid-template-columns:4px 1fr' },
+        make('div', { class: 'tick ' + (already > 0 ? 'approved' : '') }),
+        make('div', {},
+          make('h3', { text: job.title }),
+          job.location && make('p', { class: 'addr', text: job.location }),
+          job.notes && make('p', { class: 'brief', text: job.notes }),
+          job.scheduled_hours &&
+            make('p', { class: 'span', text: 'Office figured about ' + job.scheduled_hours + ' hours' }),
+          already > 0 &&
+            make('p', { class: 'span', text: 'You have put down ' + already.toFixed(2) + ' hours on this' }),
+          make('button', {
+            class: view.running ? '' : 'go',
+            disabled: !!view.running,
+            onclick: function () { clockOn(job.id, null); }
+          }, view.running ? 'Finish what you are on first' : 'Start this job')));
+    }));
   }
 
-  renderTotals(document.getElementById('day-totals'), data.totals);
+  var box = card('Your work · ' + briefDay(view.day), [], body);
+  var tail = make('div', { class: 'pad', style: 'border-top:1px solid var(--line)' });
 
-  const select = clear(document.getElementById('m-job'));
-  select.append(el('option', { value: '' }, 'General work (no job)'));
-  for (const job of data.jobs) select.append(el('option', { value: String(job.id) }, job.title));
+  if (!view.offList) {
+    tail.appendChild(make('button', {
+      disabled: !!view.running,
+      onclick: function () { view.offList = true; paint(); }
+    }, view.running ? 'Finish what you are on first' : 'Start something that is not on the list'));
+  } else {
+    var what = make('input', { id: 'off-what', maxlength: '120',
+      placeholder: 'Emergency call — broken head at the Weaver place' });
+    tail.appendChild(make('div', { class: 'field' },
+      make('label', { for: 'off-what', text: 'What are you working on?' }), what));
+    tail.appendChild(make('div', { class: 'inarow' },
+      make('button', { class: 'go', onclick: function () {
+        if (!what.value.trim()) { flash('Say what the job is first.', 'bad'); return; }
+        clockOn(null, what.value.trim());
+      } }, 'Start it'),
+      make('button', { onclick: function () { view.offList = false; paint(); } }, 'Never mind')));
+  }
+
+  box.appendChild(tail);
+  return box;
 }
 
-async function loadWeek() {
-  const end = addDays(state.weekStart, 6);
-  const data = await api(`/api/my/entries?from=${state.weekStart}&to=${end}`);
+function clockOn(jobId, describe) {
+  view.offList = false;
+  after(api('/api/my/clock-in', {
+    method: 'POST',
+    body: { job_id: jobId, work_date: view.day, start_time: timeNow(), description: describe }
+  }), 'Clocked in at ' + clockOf(timeNow()) + '. Hit "I\'m done" when you finish.');
+}
 
-  document.getElementById('week-label').textContent =
-    `${formatDate(state.weekStart)} - ${formatDate(end)}`;
-  renderTotals(document.getElementById('week-totals'), data.totals, { showPay: true });
+function myDayCard() {
+  var list = make('ul', { class: 'rows' }, view.entries.map(function (e) {
+    return hourRow(e, {
+      buttons: [
+        e.status !== 'approved' && e.end_time && make('button', {
+          class: 'line', style: 'margin:0', onclick: function () { editTimes(e); }
+        }, 'Change times'),
+        e.status !== 'approved' && make('button', {
+          class: 'line', style: 'margin:0',
+          onclick: function () {
+            if (!confirm('Take these hours off?')) return;
+            after(api('/api/my/entries/' + e.id, { method: 'DELETE' }), 'Taken off.');
+          }
+        }, 'Take it off')
+      ]
+    });
+  }));
 
-  const host = clear(document.getElementById('week-entries'));
-  if (data.entries.length === 0) {
-    host.append(el('p', { class: 'empty', text: 'Nothing logged in this week.' }));
+  return card('What you put down · ' + briefDay(view.day), [],
+    view.entries.length
+      ? list
+      : make('div', { class: 'pad' }, make('p', { class: 'none', text: 'Nothing down for this day yet.' })),
+    strip([
+      { value: view.dayTotals.hours.toFixed(2), label: 'Hours this day' },
+      { value: String(view.dayTotals.pending), label: 'Waiting on the office' }
+    ]));
+}
+
+function editTimes(entry) {
+  var from = prompt('What time did you start? Like 07:30', entry.start_time);
+  if (from === null) return;
+  var to = prompt('What time did you finish? Like 16:00', entry.end_time || '');
+  if (to === null) return;
+  var brk = prompt('How many minutes was your break?', String(entry.break_minutes || 0));
+  if (brk === null) return;
+
+  from = from.trim();
+  to = to.trim();
+
+  if (!TIME_LOOKS_RIGHT.test(from) || !TIME_LOOKS_RIGHT.test(to)) {
+    flash('Times go in like 07:30 or 16:00.', 'bad');
     return;
   }
 
-  const list = el('ul', { class: 'list' });
-  for (const entry of data.entries) list.append(entryLine(entry, { editable: true }));
-  host.append(list);
+  after(api('/api/my/entries/' + entry.id, {
+    method: 'PATCH',
+    body: { start_time: from, end_time: to, break_minutes: +brk || 0 }
+  }), 'Times changed and sent back to the office.');
 }
 
-async function refresh() {
-  await loadDay();
-  if (!document.getElementById('panel-week').hidden) await loadWeek();
+function byHandCard() {
+  if (!view.byHand) {
+    return card('Forgot to hit start?', [], make('div', { class: 'pad' },
+      make('p', { class: 'none',
+        text: 'Put the hours down by hand instead. You can add as many as you need.' }),
+      make('button', { onclick: function () { view.byHand = true; paint(); } },
+        'Put hours down by hand')));
+  }
+
+  // Their own jobs first, so the common case needs no typing.
+  var jobPick = make('select', { id: 'hand-job' },
+    view.jobs.map(function (j) { return make('option', { value: String(j.id) }, j.title); }),
+    make('option', { value: '' }, 'Something else — I will type it'));
+
+  var otherWhat = make('input', { id: 'hand-other', maxlength: '120',
+    placeholder: 'Reset the timer at the Kline house' });
+  var otherBox = make('div', { class: 'field' },
+    make('label', { for: 'hand-other', text: 'What was the job?' }), otherWhat);
+
+  jobPick.addEventListener('change', function () { otherBox.hidden = !!jobPick.value; });
+  otherBox.hidden = !!jobPick.value;
+
+  var from = make('input', { type: 'time', id: 'hand-from', value: '07:30' });
+  var to = make('input', { type: 'time', id: 'hand-to', value: '16:00' });
+  var brk = make('input', { type: 'number', id: 'hand-break', min: '0', max: '600', step: '5', value: '30' });
+  var said = make('textarea', { id: 'hand-note', maxlength: '600', placeholder: 'What you did' });
+
+  return card('Put hours down by hand', [], make('div', { class: 'pad' },
+    make('div', { class: 'field' }, make('label', { for: 'hand-job', text: 'Which job?' }), jobPick),
+    otherBox,
+    make('div', { class: 'pair', style: 'margin-bottom:14px' },
+      make('div', {}, make('label', { for: 'hand-from', text: 'Started' }), from),
+      make('div', {}, make('label', { for: 'hand-to', text: 'Finished' }), to)),
+    make('div', { class: 'field' },
+      make('label', { for: 'hand-break', text: 'Break, in minutes' }), brk,
+      make('div', { style: 'margin-top:9px' },
+        breakPicker(function () { return +brk.value || 0; }, function (m) { brk.value = String(m); }))),
+    make('div', { class: 'field' },
+      make('label', { for: 'hand-note', text: 'What did you get done?' }), said),
+    make('button', {
+      class: 'go',
+      onclick: function () {
+        if (!jobPick.value && !otherWhat.value.trim()) {
+          flash('Pick a job or type what you were doing.', 'bad');
+          return;
+        }
+        api('/api/my/entries', {
+          method: 'POST',
+          body: {
+            job_id: jobPick.value ? Number(jobPick.value) : null,
+            work_date: view.day,
+            start_time: from.value,
+            end_time: to.value,
+            break_minutes: +brk.value || 0,
+            description: jobPick.value ? said.value.trim() : otherWhat.value.trim()
+          }
+        }).then(function () {
+          // Stay open so a second and third job can go straight in.
+          view.notice = { message: 'Sent to the office. Add another if you need to.', kind: 'good' };
+          said.value = '';
+          from.value = to.value;
+          to.value = timeNow();
+          return load();
+        }).catch(function (err) { flash(err.message, 'bad'); });
+      }
+    }, 'Send these hours in'),
+    make('button', {
+      class: 'line', style: 'width:100%',
+      onclick: function () { view.byHand = false; paint(); }
+    }, 'Done adding')));
 }
 
-/* ----------------------------------------------------------------- inputs */
+function weekCard() {
+  var from = view.week.from, to = view.week.to;
+  var rows = view.week.entries;
 
-const dayInput = document.getElementById('day-date');
+  var body = rows.length
+    ? make('div', { class: 'sideways' }, make('table', {},
+        make('thead', {}, make('tr', {},
+          make('th', { text: 'Day' }),
+          make('th', { text: 'Job' }),
+          make('th', { class: 'n', text: 'Hours' }),
+          make('th', { text: 'Where it is at' }))),
+        make('tbody', {}, rows.map(function (e) {
+          return make('tr', {},
+            make('td', { text: briefDay(e.work_date) }),
+            make('td', { text: e.job_title || e.description || 'Other work' }),
+            make('td', { class: 'n', text: e.end_time ? e.hours.toFixed(2) : '—' }),
+            make('td', {}, make('span', { class: 'mark-state ' + e.status,
+              text: SAYS[e.status] || e.status })));
+        }))))
+    : make('div', { class: 'pad' }, make('p', { class: 'none', text: 'Nothing down this week.' }));
 
-dayInput.addEventListener('change', () => {
-  if (!dayInput.value) return;
-  state.date = dayInput.value;
-  loadDay().catch((err) => say(msg, err.message));
-});
+  return card('Your week · ' + briefDay(from) + ' to ' + briefDay(to), [], body,
+    strip([
+      { value: view.week.totals.hours.toFixed(2), label: 'Hours this week' },
+      { value: view.week.totals.approved_hours.toFixed(2), label: "OK'd so far" },
+      { value: CASH.format(view.week.totals.pay), label: 'Roughly' }
+    ]));
+}
 
-document.getElementById('day-prev').addEventListener('click', () => {
-  state.date = addDays(state.date, -1);
-  dayInput.value = state.date;
-  loadDay().catch((err) => say(msg, err.message));
-});
-
-document.getElementById('day-next').addEventListener('click', () => {
-  state.date = addDays(state.date, 1);
-  dayInput.value = state.date;
-  loadDay().catch((err) => say(msg, err.message));
-});
-
-document.getElementById('week-prev').addEventListener('click', () => {
-  state.weekStart = addDays(state.weekStart, -7);
-  loadWeek().catch((err) => say(msg, err.message));
-});
-
-document.getElementById('week-next').addEventListener('click', () => {
-  state.weekStart = addDays(state.weekStart, 7);
-  loadWeek().catch((err) => say(msg, err.message));
-});
-
-document.getElementById('toggle-manual').addEventListener('click', (event) => {
-  const form = document.getElementById('manual');
-  form.hidden = !form.hidden;
-  event.target.textContent = form.hidden ? 'Show' : 'Hide';
-  if (!form.hidden && !document.getElementById('m-start').value) {
-    document.getElementById('m-start').value = '08:00';
-    document.getElementById('m-end').value = nowLocal();
+function pinCard() {
+  if (!view.pin) {
+    return card('Your sign-in', [], make('div', { class: 'pad' },
+      make('p', { class: 'none', text: 'Change the number you use to sign in.' }),
+      make('button', { onclick: function () { view.pin = true; paint(); } }, 'Change my number')));
   }
-});
 
-document.getElementById('manual').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const jobId = document.getElementById('m-job').value;
+  var oldOne = make('input', { id: 'pin-old', type: 'password', inputmode: 'numeric', maxlength: '10' });
+  var newOne = make('input', { id: 'pin-new', type: 'password', inputmode: 'numeric', maxlength: '10' });
 
-  try {
-    await api('/api/my/entries', {
-      method: 'POST',
-      body: {
-        job_id: jobId ? Number(jobId) : null,
-        work_date: state.date,
-        start_time: document.getElementById('m-start').value,
-        end_time: document.getElementById('m-end').value,
-        break_minutes: Number(document.getElementById('m-break').value || 0),
-        description: document.getElementById('m-notes').value,
-      },
-    });
+  return card('Your sign-in', [], make('div', { class: 'pad' },
+    make('div', { class: 'field' },
+      make('label', { for: 'pin-old', text: 'The number you use now' }), oldOne),
+    make('div', { class: 'field' },
+      make('label', { for: 'pin-new', text: 'New number (4 to 10 digits)' }), newOne),
+    make('button', {
+      class: 'go',
+      onclick: function () {
+        api('/api/me/pin', {
+          method: 'POST',
+          body: { current_pin: oldOne.value, new_pin: newOne.value }
+        }).then(function () {
+          view.pin = false;
+          flash('Your number is changed. Other phones have been signed out.', 'good');
+        }).catch(function (err) { flash(err.message, 'bad'); });
+      }
+    }, 'Save the new number'),
+    make('button', {
+      class: 'line', style: 'width:100%',
+      onclick: function () { view.pin = false; paint(); }
+    }, 'Never mind')));
+}
 
-    document.getElementById('m-notes').value = '';
-    say(msg, 'Hours saved and sent to your manager.', 'ok');
-    await refresh();
-  } catch (err) {
-    say(msg, err.message);
+/* ------------------------------- start ----------------------------- */
+
+document.getElementById('signout').appendChild(signOutButton());
+
+// Keep the ticker honest without redrawing under the user's thumb.
+setInterval(function () {
+  var line = document.getElementById('ticker');
+  if (view.running && line) {
+    line.textContent = inWords(gap(view.running.start_time, timeNow()));
   }
+}, 30000);
+
+api('/api/me').then(function (r) {
+  view.me = r.user;
+  document.getElementById('me').textContent = r.user.name;
+  return load();
+}).catch(function (err) {
+  document.getElementById('sheet').textContent = err.message;
 });
-
-document.getElementById('pin-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  try {
-    await api('/api/me/pin', {
-      method: 'POST',
-      body: {
-        current_pin: document.getElementById('p-current').value,
-        new_pin: document.getElementById('p-new').value,
-      },
-    });
-    event.target.reset();
-    say(msg, 'PIN changed.', 'ok');
-  } catch (err) {
-    say(msg, err.message);
-  }
-});
-
-/* ------------------------------------------------------------------ start */
-
-(async function start() {
-  try {
-    const { user } = await api('/api/me');
-    document.getElementById('who').textContent = user.name;
-    dayInput.value = state.date;
-    await loadDay();
-  } catch (err) {
-    say(msg, err.message);
-  }
-}());
