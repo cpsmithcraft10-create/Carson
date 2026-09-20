@@ -4,43 +4,40 @@ const auth = require('../auth');
 const v = require('../validate');
 const { HttpError, setCookie, clearCookie } = require('../http');
 
-const { COOKIE } = auth;
-
 module.exports = [
   {
     method: 'POST',
-    path: '/api/login',
-    public: true,
+    path: '/api/signin',
+    open: true,
     handler({ db, body, res, req }) {
-      const username = v.text(body.username, 'Username', { required: true, max: 32 }).toLowerCase();
-      const pin = v.text(body.pin, 'PIN', { required: true, max: 64 });
+      const username = v.text(body.username, 'Sign-in name', { required: true, max: 32 }).toLowerCase();
+      const pin = v.text(body.pin, 'Sign-in number', { required: true, max: 64 });
 
-      const worker = db.prepare('SELECT * FROM workers WHERE username = ? COLLATE NOCASE').get(username);
+      const person = db.prepare('SELECT * FROM employees WHERE username = ? COLLATE NOCASE')
+        .get(username);
 
-      // Same message either way so a wrong username cannot be told from a wrong PIN.
-      if (!worker || !worker.active || !auth.verifyPin(pin, worker.pin_hash)) {
+      // Same message either way, so a wrong name cannot be told from a wrong number.
+      if (!person || !person.active || !auth.checkPin(pin, person.pin_hash)) {
         throw new HttpError(401, 'That name and number did not match. Try again.');
       }
 
-      const token = auth.createSession(db, worker.id);
-      setCookie(res, COOKIE, token, {
+      const token = auth.startSession(db, person.id);
+      setCookie(res, auth.COOKIE, token, {
         maxAge: auth.SESSION_DAYS * 86400,
         secure: req.headers['x-forwarded-proto'] === 'https',
       });
 
-      return {
-        user: { id: worker.id, name: worker.name, username: worker.username, role: worker.role },
-      };
+      return { user: { id: person.id, name: person.name, username: person.username, role: person.role } };
     },
   },
 
   {
     method: 'POST',
-    path: '/api/logout',
-    public: true,
+    path: '/api/signout',
+    open: true,
     handler({ db, token, res }) {
-      auth.destroySession(db, token);
-      clearCookie(res, COOKIE);
+      auth.endSession(db, token);
+      clearCookie(res, auth.COOKIE);
       return { ok: true };
     },
   },
@@ -57,18 +54,18 @@ module.exports = [
     method: 'POST',
     path: '/api/me/pin',
     handler({ db, user, body, token }) {
-      const current = v.text(body.current_pin, 'Current PIN', { required: true, max: 64 });
+      const current = v.text(body.current_pin, 'The number you use now', { required: true, max: 64 });
       const next = v.pin(body.new_pin);
 
-      const row = db.prepare('SELECT pin_hash FROM workers WHERE id = ?').get(user.id);
-      if (!auth.verifyPin(current, row.pin_hash)) {
+      const row = db.prepare('SELECT pin_hash FROM employees WHERE id = ?').get(user.id);
+      if (!auth.checkPin(current, row.pin_hash)) {
         throw new HttpError(400, 'The number you use now is not right');
       }
 
-      db.prepare('UPDATE workers SET pin_hash = ? WHERE id = ?').run(auth.hashPin(next), user.id);
+      db.prepare('UPDATE employees SET pin_hash = ? WHERE id = ?').run(auth.hashPin(next), user.id);
 
-      // Sign out other devices, but keep this one signed in.
-      db.prepare('DELETE FROM sessions WHERE worker_id = ? AND token != ?').run(user.id, token);
+      // Sign out other phones, but keep this one signed in.
+      db.prepare('DELETE FROM sessions WHERE employee_id = ? AND token != ?').run(user.id, token);
 
       return { ok: true };
     },

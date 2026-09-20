@@ -1,14 +1,14 @@
 'use strict';
 
 var form = document.getElementById('signin');
-var notice = document.getElementById('notice');
+var flash = document.getElementById('flash');
 
 function landing(user) {
-  return user.role === 'admin' ? '/office.html' : '/app.html';
+  return user.role === 'office' ? '/office.html' : '/crew.html';
 }
 
-// Already signed in? Go straight through.
-api('/api/me', { signInOnExpiry: false })
+// Already signed in? Straight through.
+api('/api/me', { bounceOnExpiry: false })
   .then(function (r) { location.replace(landing(r.user)); })
   .catch(function () { /* not signed in yet */ });
 
@@ -17,18 +17,18 @@ form.addEventListener('submit', function (event) {
 
   var button = form.querySelector('button');
   button.disabled = true;
-  say(notice, '');
+  flashInto(flash, '');
 
-  api('/api/login', {
+  api('/api/signin', {
     method: 'POST',
     body: {
       username: document.getElementById('username').value,
-      pin: document.getElementById('pin').value
-    }
+      pin: document.getElementById('pin').value,
+    },
   }).then(function (r) {
     location.replace(landing(r.user));
   }).catch(function (err) {
-    say(notice, err.message, 'bad');
+    flashInto(flash, err.message, 'bad');
     document.getElementById('pin').value = '';
     button.disabled = false;
   });

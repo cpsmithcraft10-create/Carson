@@ -1,7 +1,7 @@
 'use strict';
 
 const { HttpError } = require('./http');
-const { isValidDate, isValidTime, spanMinutes, MAX_SHIFT_HOURS } = require('./hours');
+const { isDate, isTime, spanMinutes, LONGEST_SHIFT_HOURS } = require('./time');
 
 function fail(message) {
   throw new HttpError(400, message);
@@ -9,54 +9,48 @@ function fail(message) {
 
 function text(value, label, { required = false, max = 500 } = {}) {
   if (value == null || value === '') {
-    if (required) fail(`${label} is required`);
+    if (required) fail(`${label} is needed`);
     return null;
   }
-  if (typeof value !== 'string') fail(`${label} must be text`);
+  if (typeof value !== 'string') fail(`${label} has to be text`);
 
   const trimmed = value.trim();
-  if (required && !trimmed) fail(`${label} is required`);
-  if (trimmed.length > max) fail(`${label} must be ${max} characters or fewer`);
+  if (required && !trimmed) fail(`${label} is needed`);
+  if (trimmed.length > max) fail(`${label} has to be ${max} characters or fewer`);
   return trimmed || null;
 }
 
 function date(value, label, { required = true } = {}) {
   if (value == null || value === '') {
-    if (required) fail(`${label} is required`);
+    if (required) fail(`${label} is needed`);
     return null;
   }
-  if (!isValidDate(value)) fail(`${label} must be a date like 2026-09-18`);
+  if (!isDate(value)) fail(`${label} has to be a date like 2026-09-20`);
   return value;
 }
 
 function time(value, label, { required = true } = {}) {
   if (value == null || value === '') {
-    if (required) fail(`${label} is required`);
+    if (required) fail(`${label} is needed`);
     return null;
   }
-  if (!isValidTime(value)) fail(`${label} must be a time like 08:30`);
+  if (!isTime(value)) fail(`${label} has to be a time like 07:30`);
   return value;
 }
 
-function integer(value, label, { min = 0, max = 100000, required = false, fallback = 0 } = {}) {
-  if (value == null || value === '') {
-    if (required) fail(`${label} is required`);
-    return fallback;
-  }
+function whole(value, label, { min = 0, max = 100000, fallback = 0 } = {}) {
+  if (value == null || value === '') return fallback;
   const n = Number(value);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) fail(`${label} must be a whole number`);
-  if (n < min || n > max) fail(`${label} must be between ${min} and ${max}`);
+  if (!Number.isInteger(n)) fail(`${label} has to be a whole number`);
+  if (n < min || n > max) fail(`${label} has to be between ${min} and ${max}`);
   return n;
 }
 
-function decimal(value, label, { min = 0, max = 100000, required = false, fallback = null } = {}) {
-  if (value == null || value === '') {
-    if (required) fail(`${label} is required`);
-    return fallback;
-  }
+function decimal(value, label, { min = 0, max = 100000, fallback = null } = {}) {
+  if (value == null || value === '') return fallback;
   const n = Number(value);
-  if (!Number.isFinite(n)) fail(`${label} must be a number`);
-  if (n < min || n > max) fail(`${label} must be between ${min} and ${max}`);
+  if (!Number.isFinite(n)) fail(`${label} has to be a number`);
+  if (n < min || n > max) fail(`${label} has to be between ${min} and ${max}`);
   return Math.round(n * 100) / 100;
 }
 
@@ -68,45 +62,47 @@ function id(value, label) {
 
 function oneOf(value, label, allowed, { required = true, fallback = null } = {}) {
   if (value == null || value === '') {
-    if (required) fail(`${label} is required`);
+    if (required) fail(`${label} is needed`);
     return fallback;
   }
-  if (!allowed.includes(value)) fail(`${label} must be one of: ${allowed.join(', ')}`);
+  if (!allowed.includes(value)) fail(`${label} has to be one of: ${allowed.join(', ')}`);
   return value;
 }
 
 function username(value) {
-  const name = text(value, 'Username', { required: true, max: 32 });
+  const name = text(value, 'Sign-in name', { required: true, max: 32 });
   if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
-    fail('Username can only contain letters, numbers, dots, dashes and underscores');
+    fail('A sign-in name can only have letters, numbers, dots, dashes and underscores');
   }
   return name.toLowerCase();
 }
 
 function pin(value) {
   const raw = typeof value === 'string' ? value.trim() : '';
-  if (!/^\d{4,10}$/.test(raw)) fail('The sign-in number must be 4 to 10 digits');
+  if (!/^\d{4,10}$/.test(raw)) fail('The sign-in number has to be 4 to 10 digits');
   return raw;
 }
 
 /**
- * Catches the two ways a shift comes out nonsense: a finish time that wraps so
- * far round the clock it must be a typo, and a break longer than the shift.
- * A finish time before the start is still allowed - that is a night shift.
+ * Catches the two ways a shift comes out nonsense: a finish that wraps so far
+ * round the clock it has to be a typo, and a break longer than the shift.
+ * A finish before the start is still fine - that is work past midnight.
  */
-function shift(start, end, breakMinutes) {
+function shiftMakesSense(start, end, breakMinutes) {
   if (!start || !end) return;
 
   const span = spanMinutes(start, end);
-  const hours = Math.round((span / 60) * 10) / 10;
+  const asHours = Math.round((span / 60) * 10) / 10;
 
-  if (span > MAX_SHIFT_HOURS * 60) {
-    fail(`${start} to ${end} works out as ${hours} hours. Check the times - if the shift ran over ` +
-         'two days, log each day separately.');
+  if (span > LONGEST_SHIFT_HOURS * 60) {
+    fail(`${start} to ${end} works out as ${asHours} hours. Check the times — if the work ` +
+         'ran past midnight, put each day down on its own.');
   }
-  if (breakMinutes >= span) {
-    fail(`A ${breakMinutes} minute break does not fit inside a ${hours} hour shift`);
+  if (breakMinutes > 0 && breakMinutes >= span) {
+    fail(`A ${breakMinutes} minute break does not fit inside ${asHours} hours on the job.`);
   }
 }
 
-module.exports = { fail, text, date, time, integer, decimal, id, oneOf, username, pin, shift };
+module.exports = {
+  fail, text, date, time, whole, decimal, id, oneOf, username, pin, shiftMakesSense,
+};

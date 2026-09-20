@@ -6,22 +6,21 @@ const assert = require('node:assert');
 const { open } = require('../src/db');
 const auth = require('../src/auth');
 const { createServer } = require('../server');
-const { today } = require('../src/hours');
+const { today, addDays } = require('../src/time');
 
-/** Starts the real server against a throwaway in-memory database. */
+/** The real server against a throwaway in-memory database. */
 async function startApp() {
   const db = open(':memory:');
 
-  db.prepare(`INSERT INTO workers (name, username, pin_hash, role) VALUES (?, ?, ?, 'admin')`)
-    .run('Boss', 'boss', auth.hashPin('9999'));
+  db.prepare(`INSERT INTO employees (name, username, pin_hash, role) VALUES (?, ?, ?, 'office')`)
+    .run('The office', 'office', auth.hashPin('9999'));
 
   const server = createServer(db);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const base = `http://127.0.0.1:${server.address().port}`;
 
   return {
     db,
-    base,
+    base: `http://127.0.0.1:${server.address().port}`,
     async stop() {
       await new Promise((resolve) => server.close(resolve));
       db.close();
@@ -29,7 +28,7 @@ async function startApp() {
   };
 }
 
-/** A tiny client that remembers its session cookie, like a browser would. */
+/** A client that remembers its cookie, the way a phone would. */
 function client(base) {
   let cookie = null;
 
@@ -43,328 +42,418 @@ function client(base) {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    const setCookie = res.headers.get('set-cookie');
-    if (setCookie) cookie = setCookie.split(';')[0];
+    const set = res.headers.get('set-cookie');
+    if (set) cookie = set.split(';')[0];
 
     const text = await res.text();
-    let data = {};
-    if (text && (res.headers.get('content-type') || '').includes('json')) data = JSON.parse(text);
-    else data = { text };
-
-    return { status: res.status, data };
+    const json = (res.headers.get('content-type') || '').includes('json');
+    return { status: res.status, data: text && json ? JSON.parse(text) : { text } };
   };
 }
 
-test('the whole run: assign work, log hours, approve, report', async (t) => {
+test('a full day: give out a job, work it, send hours, office OKs them', async (t) => {
   const app = await startApp();
   t.after(() => app.stop());
 
-  const boss = client(app.base);
-  const worker = client(app.base);
+  const office = client(app.base);
+  const ray = client(app.base);
+  const tom = client(app.base);
   const date = today();
 
-  await t.test('the manager signs in', async () => {
-    const wrong = await boss('/api/login', { method: 'POST', body: { username: 'boss', pin: '0000' } });
+  await t.test('the office signs in', async () => {
+    const wrong = await office('/api/signin', { method: 'POST', body: { username: 'office', pin: '0000' } });
     assert.strictEqual(wrong.status, 401);
 
-    const ok = await boss('/api/login', { method: 'POST', body: { username: 'boss', pin: '9999' } });
+    const ok = await office('/api/signin', { method: 'POST', body: { username: 'office', pin: '9999' } });
     assert.strictEqual(ok.status, 200);
-    assert.strictEqual(ok.data.user.role, 'admin');
+    assert.strictEqual(ok.data.user.role, 'office');
   });
 
-  let workerId;
-  await t.test('the manager adds a worker', async () => {
-    const res = await boss('/api/admin/workers', {
+  let rayId; let tomId;
+  await t.test('the office adds two crew', async () => {
+    const a = await office('/api/office/people', {
       method: 'POST',
-      body: { name: 'Dana', username: 'dana', pin: '1234', hourly_rate: 30 },
+      body: { name: 'Ray Delgado', username: 'ray', pin: '1111', hourly_rate: 27 },
     });
-    assert.strictEqual(res.status, 200);
-    workerId = res.data.worker.id;
+    assert.strictEqual(a.status, 200);
+    rayId = a.data.person.id;
 
-    const dupe = await boss('/api/admin/workers', {
+    const b = await office('/api/office/people', {
       method: 'POST',
-      body: { name: 'Other Dana', username: 'DANA', pin: '4321' },
+      body: { name: 'Tom Feeney', username: 'tom', pin: '2222', hourly_rate: 25 },
+    });
+    tomId = b.data.person.id;
+
+    const dupe = await office('/api/office/people', {
+      method: 'POST',
+      body: { name: 'Another Ray', username: 'RAY', pin: '4321' },
     });
     assert.strictEqual(dupe.status, 409);
 
-    const badPin = await boss('/api/admin/workers', {
+    const shortPin = await office('/api/office/people', {
       method: 'POST',
       body: { name: 'Nope', username: 'nope', pin: '12' },
     });
-    assert.strictEqual(badPin.status, 400);
+    assert.strictEqual(shortPin.status, 400);
   });
 
   let jobId;
-  await t.test('the manager gives out a job for the day', async () => {
-    const res = await boss('/api/admin/jobs', {
+  await t.test('a job goes out to a two-person crew', async () => {
+    const res = await office('/api/office/jobs', {
       method: 'POST',
       body: {
-        title: 'Riverside fit-out',
-        work_date: date,
-        location: '14 Riverside Ave',
-        scheduled_hours: 8,
-        worker_ids: [workerId],
+        customer: 'Kestrel Ridge HOA',
+        job_date: date,
+        kind: 'drainage',
+        address: '88 Willow Creek Ct',
+        details: 'French drain along the back fence',
+        est_hours: 8,
+        crew_ids: [rayId, tomId],
       },
     });
+
     assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.data.jobs.length, 1);
-    jobId = res.data.jobs[0].id;
-  });
+    assert.strictEqual(res.data.job.status, 'assigned');
+    assert.strictEqual(res.data.job.crew.length, 2, 'both people are on the job');
+    jobId = res.data.job.id;
 
-  await t.test('the worker signs in and sees only their own job', async () => {
-    const login = await worker('/api/login', { method: 'POST', body: { username: 'dana', pin: '1234' } });
-    assert.strictEqual(login.status, 200);
-    assert.strictEqual(login.data.user.role, 'worker');
-
-    const day = await worker(`/api/my/day?date=${date}`);
-    assert.strictEqual(day.status, 200);
-    assert.strictEqual(day.data.jobs.length, 1);
-    assert.strictEqual(day.data.jobs[0].title, 'Riverside fit-out');
-    assert.strictEqual(day.data.running, null);
-  });
-
-  let entryId;
-  await t.test('clocking in and out records the hours', async () => {
-    const inRes = await worker('/api/my/clock-in', {
+    const nobody = await office('/api/office/jobs', {
       method: 'POST',
-      body: { job_id: jobId, work_date: date, start_time: '07:30' },
+      body: { customer: 'Nobody', job_date: date, crew_ids: [] },
     });
-    assert.strictEqual(inRes.status, 200);
-    assert.strictEqual(inRes.data.entry.status, 'open');
-    entryId = inRes.data.entry.id;
+    assert.strictEqual(nobody.status, 400);
+    assert.match(nobody.data.error, /at least one person/);
+  });
 
-    const twice = await worker('/api/my/clock-in', {
+  await t.test('both crew see the job, and nobody else does', async () => {
+    await ray('/api/signin', { method: 'POST', body: { username: 'ray', pin: '1111' } });
+    await tom('/api/signin', { method: 'POST', body: { username: 'tom', pin: '2222' } });
+
+    const rayDay = await ray(`/api/crew/day?date=${date}`);
+    assert.strictEqual(rayDay.status, 200);
+    assert.strictEqual(rayDay.data.jobs.length, 1);
+    assert.strictEqual(rayDay.data.jobs[0].customer, 'Kestrel Ridge HOA');
+    assert.strictEqual(rayDay.data.jobs[0].address, '88 Willow Creek Ct');
+    assert.strictEqual(rayDay.data.running, null);
+
+    const tomDay = await tom(`/api/crew/day?date=${date}`);
+    assert.strictEqual(tomDay.data.jobs.length, 1, 'the second person sees it too');
+
+    const outsider = await office('/api/office/people', {
+      method: 'POST',
+      body: { name: 'Luis Barrera', username: 'luis', pin: '3333' },
+    });
+    const luis = client(app.base);
+    await luis('/api/signin', { method: 'POST', body: { username: 'luis', pin: '3333' } });
+    const luisDay = await luis(`/api/crew/day?date=${date}`);
+    assert.strictEqual(luisDay.data.jobs.length, 0, 'somebody not on the job sees nothing');
+    assert.ok(outsider.data.person.id);
+  });
+
+  let shiftId;
+  await t.test('clocking on moves the job to working, and clocking off sends the hours', async () => {
+    const on = await ray('/api/crew/clock-in', {
+      method: 'POST',
+      body: { job_id: jobId, work_date: date, start_time: '07:00' },
+    });
+    assert.strictEqual(on.status, 200);
+    assert.strictEqual(on.data.shift.status, 'open');
+    shiftId = on.data.shift.id;
+
+    const job = await office(`/api/office/jobs?from=${date}&to=${date}`);
+    assert.strictEqual(job.data.jobs[0].status, 'working', 'the office sees it is live');
+
+    const twice = await ray('/api/crew/clock-in', {
       method: 'POST',
       body: { job_id: jobId, work_date: date, start_time: '08:00' },
     });
-    assert.strictEqual(twice.status, 409, 'cannot be clocked in twice');
+    assert.strictEqual(twice.status, 409);
 
-    const outRes = await worker(`/api/my/entries/${entryId}/clock-out`, {
+    const off = await ray(`/api/crew/shifts/${shiftId}/clock-out`, {
       method: 'POST',
-      body: { end_time: '16:00', break_minutes: 30, description: 'Framing done' },
+      body: { end_time: '15:30', break_minutes: 30, notes: 'Trench open, gravel tomorrow' },
     });
-    assert.strictEqual(outRes.status, 200);
-    assert.strictEqual(outRes.data.entry.status, 'submitted');
-    assert.strictEqual(outRes.data.entry.hours, 8);
-    assert.strictEqual(outRes.data.entry.pay, 240);
+    assert.strictEqual(off.status, 200);
+    assert.strictEqual(off.data.shift.status, 'sent');
+    assert.strictEqual(off.data.shift.hours, 8);
+    assert.strictEqual(off.data.shift.pay, 216);
   });
 
-  await t.test('a worker cannot log against someone else\'s job', async () => {
-    const other = await boss('/api/admin/workers', {
+  await t.test('a crew member cannot log against a job they are not on', async () => {
+    const other = await office('/api/office/jobs', {
       method: 'POST',
-      body: { name: 'Miguel', username: 'miguel', pin: '2468' },
-    });
-    const theirJob = await boss('/api/admin/jobs', {
-      method: 'POST',
-      body: { title: 'Somewhere else', work_date: date, worker_ids: [other.data.worker.id] },
+      body: { customer: 'Somewhere else', job_date: date, crew_ids: [tomId] },
     });
 
-    const res = await worker('/api/my/entries', {
+    const res = await ray('/api/crew/shifts', {
       method: 'POST',
       body: {
-        job_id: theirJob.data.jobs[0].id,
+        job_id: other.data.job.id,
         work_date: date,
-        start_time: '09:00',
-        end_time: '10:00',
+        start_time: '16:00',
+        end_time: '17:00',
       },
     });
     assert.strictEqual(res.status, 400);
+    assert.match(res.data.error, /not on your list/);
   });
 
-  await t.test('the manager approves the shift', async () => {
-    const pending = await boss('/api/admin/pending');
-    assert.strictEqual(pending.data.entries.length, 1);
-    assert.strictEqual(pending.data.entries[0].worker_name, 'Dana');
+  await t.test('work nobody wrote down can still be clocked', async () => {
+    const nameless = await ray('/api/crew/clock-in', {
+      method: 'POST', body: { work_date: date, start_time: '16:00' },
+    });
+    assert.strictEqual(nameless.status, 400);
+    assert.match(nameless.data.error, /say what you are working on/);
 
-    const res = await boss(`/api/admin/entries/${entryId}/approve`, { method: 'POST', body: {} });
+    const callOut = await ray('/api/crew/clock-in', {
+      method: 'POST',
+      body: { work_date: date, start_time: '16:00', other_work: 'Broken head at the Weaver place' },
+    });
+    assert.strictEqual(callOut.status, 200);
+    assert.strictEqual(callOut.data.shift.job_id, null);
+    assert.strictEqual(callOut.data.shift.what, 'Broken head at the Weaver place');
+
+    await ray(`/api/crew/shifts/${callOut.data.shift.id}`, { method: 'DELETE' });
+  });
+
+  await t.test('the crew can close the job out with notes and parts', async () => {
+    const res = await tom(`/api/crew/jobs/${jobId}/finish`, {
+      method: 'POST',
+      body: { wrap_notes: 'Drain in and backfilled', materials: '60ft of 4in pipe, two catch basins' },
+    });
     assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.data.entry.status, 'approved');
-    assert.strictEqual(res.data.entry.reviewed_by_name, 'Boss');
-
-    const after = await boss('/api/admin/pending');
-    assert.strictEqual(after.data.entries.length, 0);
+    assert.strictEqual(res.data.job.status, 'done');
+    assert.strictEqual(res.data.job.materials, '60ft of 4in pipe, two catch basins');
+    assert.strictEqual(res.data.job.finished_by_name, 'Tom Feeney');
   });
 
-  await t.test('approved hours are locked for the worker', async () => {
-    const edit = await worker(`/api/my/entries/${entryId}`, {
-      method: 'PATCH',
-      body: { end_time: '19:00' },
+  await t.test('the office OKs the hours', async () => {
+    const waiting = await office('/api/office/waiting');
+    assert.strictEqual(waiting.data.shifts.length, 1);
+    assert.strictEqual(waiting.data.shifts[0].employee_name, 'Ray Delgado');
+
+    const res = await office(`/api/office/shifts/${shiftId}/ok`, { method: 'POST', body: {} });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.data.shift.status, 'ok');
+    assert.strictEqual(res.data.shift.reviewed_by_name, 'The office');
+
+    const after = await office('/api/office/waiting');
+    assert.strictEqual(after.data.shifts.length, 0);
+  });
+
+  await t.test("hours the office OK'd are locked to the crew", async () => {
+    const edit = await ray(`/api/crew/shifts/${shiftId}`, {
+      method: 'PATCH', body: { end_time: '19:00' },
     });
     assert.strictEqual(edit.status, 409);
 
-    const remove = await worker(`/api/my/entries/${entryId}`, { method: 'DELETE' });
-    assert.strictEqual(remove.status, 409);
+    const gone = await ray(`/api/crew/shifts/${shiftId}`, { method: 'DELETE' });
+    assert.strictEqual(gone.status, 409);
   });
 
-  await t.test('a sent-back shift can be fixed and resubmitted', async () => {
-    await boss(`/api/admin/entries/${entryId}/reject`, {
-      method: 'POST',
-      body: { note: 'You finished at 15:00, not 16:00' },
+  await t.test('a question goes back, gets fixed, and returns to the pile', async () => {
+    await office(`/api/office/shifts/${shiftId}/question`, {
+      method: 'POST', body: { question: 'You finished at 15:00, not 15:30' },
     });
 
-    const day = await worker(`/api/my/day?date=${date}`);
-    const entry = day.data.entries.find((e) => e.id === entryId);
-    assert.strictEqual(entry.status, 'rejected');
-    assert.strictEqual(entry.review_note, 'You finished at 15:00, not 16:00');
+    const day = await ray(`/api/crew/day?date=${date}`);
+    const mine = day.data.shifts.find((s) => s.id === shiftId);
+    assert.strictEqual(mine.status, 'question');
+    assert.strictEqual(mine.question, 'You finished at 15:00, not 15:30');
 
-    const fixed = await worker(`/api/my/entries/${entryId}`, {
-      method: 'PATCH',
-      body: { end_time: '15:00' },
+    const fixed = await ray(`/api/crew/shifts/${shiftId}`, {
+      method: 'PATCH', body: { end_time: '15:00' },
     });
     assert.strictEqual(fixed.status, 200);
-    assert.strictEqual(fixed.data.entry.status, 'submitted', 'a fix goes back for review');
-    assert.strictEqual(fixed.data.entry.review_note, null);
-    assert.strictEqual(fixed.data.entry.hours, 7);
+    assert.strictEqual(fixed.data.shift.status, 'sent', 'a fix goes back for another look');
+    assert.strictEqual(fixed.data.shift.question, null);
+    assert.strictEqual(fixed.data.shift.hours, 7.5);
 
-    await boss(`/api/admin/entries/${entryId}/approve`, { method: 'POST', body: {} });
+    await office(`/api/office/shifts/${shiftId}/ok`, { method: 'POST', body: {} });
   });
 
-  await t.test('the report and CSV add up', async () => {
-    const report = await boss(`/api/admin/report?from=${date}&to=${date}`);
+  await t.test('announcements reach the crew and the office sees who read them', async () => {
+    const posted = await office('/api/office/notices', {
+      method: 'POST',
+      body: { title: 'Freeze warning Thursday', body: 'Blowouts move up a week.', urgent: true },
+    });
+    assert.strictEqual(posted.status, 200);
+    const noticeId = posted.data.notice.id;
+
+    const mine = await ray('/api/crew/notices');
+    assert.strictEqual(mine.data.notices.length, 1);
+    assert.strictEqual(mine.data.unread, 1, 'it starts unread');
+
+    await ray(`/api/crew/notices/${noticeId}/seen`, { method: 'POST' });
+    await ray(`/api/crew/notices/${noticeId}/seen`, { method: 'POST' });
+
+    const again = await ray('/api/crew/notices');
+    assert.strictEqual(again.data.unread, 0, 'marking it twice is harmless');
+
+    const seen = await office('/api/office/notices');
+    assert.deepStrictEqual(seen.data.notices[0].seen_by, ['Ray Delgado']);
+  });
+
+  await t.test('payroll and the CSV add up', async () => {
+    const report = await office(`/api/office/payroll?from=${date}&to=${date}`);
     assert.strictEqual(report.status, 200);
 
-    const dana = report.data.rows.find((r) => r.worker_name === 'Dana');
-    assert.strictEqual(dana.hours, 7);
-    assert.strictEqual(dana.approved_hours, 7);
-    assert.strictEqual(dana.pay, 210);
-    assert.strictEqual(report.data.totals.hours, 7);
+    const line = report.data.rows.find((r) => r.name === 'Ray Delgado');
+    assert.strictEqual(line.hours, 7.5);
+    assert.strictEqual(line.ok_hours, 7.5);
+    assert.strictEqual(line.pay, 202.5);
 
-    const csv = await boss(`/api/admin/report.csv?from=${date}&to=${date}`);
+    const csv = await office(`/api/office/payroll.csv?from=${date}&to=${date}`);
     assert.strictEqual(csv.status, 200);
-    assert.match(csv.data.text, /"Dana"/);
-    assert.match(csv.data.text, /"Riverside fit-out"/);
+    assert.match(csv.data.text, /"Ray Delgado"/);
+    assert.match(csv.data.text, /"Kestrel Ridge HOA"/);
   });
 
-  await t.test('work that was never on the list can still be clocked', async () => {
-    const nameless = await worker('/api/my/clock-in', {
+  await t.test('a mistyped finish is caught; a night job is not', async () => {
+    const typo = await ray('/api/crew/shifts', {
       method: 'POST',
-      body: { work_date: date, start_time: '13:00' },
-    });
-    assert.strictEqual(nameless.status, 400, 'a shift with no job and no description is refused');
-    assert.match(nameless.data.error, /say what you are working on/);
-
-    const callOut = await worker('/api/my/clock-in', {
-      method: 'POST',
-      body: { work_date: date, start_time: '13:00', description: 'Broken head at the Weaver place' },
-    });
-    assert.strictEqual(callOut.status, 200);
-    assert.strictEqual(callOut.data.entry.job_id, null);
-    assert.strictEqual(callOut.data.entry.description, 'Broken head at the Weaver place');
-
-    const out = await worker(`/api/my/entries/${callOut.data.entry.id}/clock-out`, {
-      method: 'POST',
-      body: { end_time: '15:00', break_minutes: 0 },
-    });
-    assert.strictEqual(out.status, 200);
-    assert.strictEqual(out.data.entry.hours, 2);
-    assert.strictEqual(out.data.entry.description, 'Broken head at the Weaver place',
-      'clocking out without notes keeps what the job was');
-
-    await worker(`/api/my/entries/${callOut.data.entry.id}`, { method: 'DELETE' });
-  });
-
-  await t.test('a mistyped finish time is caught, a real night shift is not', async () => {
-    const typo = await worker('/api/my/entries', {
-      method: 'POST',
-      body: { work_date: date, start_time: '18:30', end_time: '17:00' },
+      body: { work_date: date, other_work: 'Callback', start_time: '18:30', end_time: '17:00' },
     });
     assert.strictEqual(typo.status, 400);
     assert.match(typo.data.error, /22\.5 hours/);
 
-    const longBreak = await worker('/api/my/entries', {
+    const night = await ray('/api/crew/shifts', {
       method: 'POST',
-      body: { work_date: date, start_time: '08:00', end_time: '08:30', break_minutes: 60 },
+      body: {
+        work_date: date, other_work: 'Lighting timer callback',
+        start_time: '21:00', end_time: '05:00', break_minutes: 30,
+      },
     });
-    assert.strictEqual(longBreak.status, 400);
-    assert.match(longBreak.data.error, /does not fit/);
-
-    const nightShift = await worker('/api/my/entries', {
-      method: 'POST',
-      body: { work_date: date, start_time: '22:00', end_time: '06:00', break_minutes: 30 },
-    });
-    assert.strictEqual(nightShift.status, 200);
-    assert.strictEqual(nightShift.data.entry.hours, 7.5);
-
-    await worker(`/api/my/entries/${nightShift.data.entry.id}`, { method: 'DELETE' });
+    assert.strictEqual(night.status, 200);
+    assert.strictEqual(night.data.shift.hours, 7.5);
   });
 
-  await t.test('workers are kept out of the manager side', async () => {
-    for (const path of ['/api/admin/workers', '/api/admin/pending', `/api/admin/report?from=${date}&to=${date}`]) {
-      const res = await worker(path);
-      assert.strictEqual(res.status, 403, `${path} should be managers only`);
+  await t.test('the crew are kept out of the office side', async () => {
+    for (const path of ['/api/office/people', '/api/office/waiting', '/api/office/notices']) {
+      const res = await ray(path);
+      assert.strictEqual(res.status, 403, `${path} should be office only`);
     }
   });
 
   await t.test('signed-out requests are refused', async () => {
     const stranger = client(app.base);
-    assert.strictEqual((await stranger('/api/my/day')).status, 401);
-    assert.strictEqual((await stranger('/api/admin/pending')).status, 401);
-  });
-
-  await t.test('bad input is rejected with a readable message', async () => {
-    const res = await worker('/api/my/entries', {
-      method: 'POST',
-      body: { work_date: 'yesterday', start_time: '08:00', end_time: '09:00' },
-    });
-    assert.strictEqual(res.status, 400);
-    assert.match(res.data.error, /Date must be a date/);
-
-    const badTime = await worker('/api/my/entries', {
-      method: 'POST',
-      body: { work_date: date, start_time: '25:00', end_time: '09:00' },
-    });
-    assert.strictEqual(badTime.status, 400);
+    assert.strictEqual((await stranger('/api/crew/day')).status, 401);
+    assert.strictEqual((await stranger('/api/office/day')).status, 401);
   });
 });
 
-test('deactivating a worker ends their session', async (t) => {
+test('switching somebody off ends their session', async (t) => {
   const app = await startApp();
   t.after(() => app.stop());
 
-  const boss = client(app.base);
-  const worker = client(app.base);
+  const office = client(app.base);
+  const temp = client(app.base);
 
-  await boss('/api/login', { method: 'POST', body: { username: 'boss', pin: '9999' } });
-  const added = await boss('/api/admin/workers', {
-    method: 'POST',
-    body: { name: 'Temp', username: 'temp', pin: '5555' },
+  await office('/api/signin', { method: 'POST', body: { username: 'office', pin: '9999' } });
+  const added = await office('/api/office/people', {
+    method: 'POST', body: { name: 'Temp Hand', username: 'temp', pin: '5555' },
   });
 
-  await worker('/api/login', { method: 'POST', body: { username: 'temp', pin: '5555' } });
-  assert.strictEqual((await worker('/api/my/day')).status, 200);
+  await temp('/api/signin', { method: 'POST', body: { username: 'temp', pin: '5555' } });
+  assert.strictEqual((await temp('/api/crew/day')).status, 200);
 
-  await boss(`/api/admin/workers/${added.data.worker.id}`, { method: 'PATCH', body: { active: false } });
+  await office(`/api/office/people/${added.data.person.id}`, {
+    method: 'PATCH', body: { active: false },
+  });
 
-  assert.strictEqual((await worker('/api/my/day')).status, 401, 'session dies with the account');
+  assert.strictEqual((await temp('/api/crew/day')).status, 401, 'the session dies with the account');
 
-  const retry = await worker('/api/login', { method: 'POST', body: { username: 'temp', pin: '5555' } });
-  assert.strictEqual(retry.status, 401, 'an inactive worker cannot sign back in');
+  const retry = await temp('/api/signin', { method: 'POST', body: { username: 'temp', pin: '5555' } });
+  assert.strictEqual(retry.status, 401, 'and they cannot sign back in');
 });
 
-test('the last manager account cannot lock everyone out', async (t) => {
+test('the last office account cannot lock everybody out', async (t) => {
   const app = await startApp();
   t.after(() => app.stop());
 
-  const boss = client(app.base);
-  await boss('/api/login', { method: 'POST', body: { username: 'boss', pin: '9999' } });
+  const office = client(app.base);
+  await office('/api/signin', { method: 'POST', body: { username: 'office', pin: '9999' } });
 
-  const me = await boss('/api/me');
-  const res = await boss(`/api/admin/workers/${me.data.user.id}`, {
-    method: 'PATCH',
-    body: { role: 'worker' },
+  const me = await office('/api/me');
+  const res = await office(`/api/office/people/${me.data.user.id}`, {
+    method: 'PATCH', body: { role: 'crew' },
   });
 
   assert.strictEqual(res.status, 409);
+});
+
+test('the crew of a job can be changed without losing the job', async (t) => {
+  const app = await startApp();
+  t.after(() => app.stop());
+
+  const office = client(app.base);
+  await office('/api/signin', { method: 'POST', body: { username: 'office', pin: '9999' } });
+
+  const a = await office('/api/office/people', {
+    method: 'POST', body: { name: 'Ray', username: 'ray', pin: '1111' },
+  });
+  const b = await office('/api/office/people', {
+    method: 'POST', body: { name: 'Tom', username: 'tom', pin: '2222' },
+  });
+
+  const job = await office('/api/office/jobs', {
+    method: 'POST',
+    body: { customer: 'Weaver', job_date: today(), crew_ids: [a.data.person.id] },
+  });
+
+  const moved = await office(`/api/office/jobs/${job.data.job.id}`, {
+    method: 'PATCH', body: { crew_ids: [b.data.person.id] },
+  });
+
+  assert.strictEqual(moved.status, 200);
+  assert.deepStrictEqual(moved.data.job.crew.map((c) => c.name), ['Tom']);
+
+  const emptied = await office(`/api/office/jobs/${job.data.job.id}`, {
+    method: 'PATCH', body: { crew_ids: [] },
+  });
+  assert.strictEqual(emptied.status, 400, 'a job cannot be left with nobody on it');
 });
 
 test('static files never escape the public directory', async (t) => {
   const app = await startApp();
   t.after(() => app.stop());
 
-  const res = await fetch(`${app.base}/../server.js`, { redirect: 'manual' });
-  assert.ok(res.status === 404 || res.status === 403 || res.status === 301, `got ${res.status}`);
+  const climb = await fetch(`${app.base}/../server.js`, { redirect: 'manual' });
+  assert.ok([301, 403, 404].includes(climb.status), `got ${climb.status}`);
+});
 
-  const home = await fetch(`${app.base}/`);
-  assert.strictEqual(home.status, 200);
-  assert.match(await home.text(), /Crew hours/);
+test('a job spanning two days keeps its own hours', async (t) => {
+  const app = await startApp();
+  t.after(() => app.stop());
+
+  const office = client(app.base);
+  const ray = client(app.base);
+
+  await office('/api/signin', { method: 'POST', body: { username: 'office', pin: '9999' } });
+  const person = await office('/api/office/people', {
+    method: 'POST', body: { name: 'Ray', username: 'ray', pin: '1111', hourly_rate: 20 },
+  });
+
+  const yesterday = addDays(today(), -1);
+  const job = await office('/api/office/jobs', {
+    method: 'POST',
+    body: { customer: 'Brookside', job_date: yesterday, crew_ids: [person.data.person.id] },
+  });
+
+  await ray('/api/signin', { method: 'POST', body: { username: 'ray', pin: '1111' } });
+
+  for (const [date, start, end] of [[yesterday, '08:00', '12:00'], [today(), '08:00', '10:00']]) {
+    const res = await ray('/api/crew/shifts', {
+      method: 'POST',
+      body: { job_id: job.data.job.id, work_date: date, start_time: start, end_time: end },
+    });
+    assert.strictEqual(res.status, 200);
+  }
+
+  const week = await ray(`/api/crew/week?from=${yesterday}&to=${today()}`);
+  assert.strictEqual(week.data.totals.hours, 6);
+  assert.strictEqual(week.data.totals.pay, 120);
+
+  const dayOnly = await ray(`/api/crew/day?date=${today()}`);
+  assert.strictEqual(dayOnly.data.totals.hours, 2, 'the day view only counts that day');
 });

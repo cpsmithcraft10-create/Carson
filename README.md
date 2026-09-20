@@ -1,125 +1,137 @@
-# Crew hours
+# Custom Outdoor Design — crew app
 
-Hours for an irrigation, drainage and lighting crew. The office gives out the
-day's work; the crew opens it on their phone, hits **Start this job**, hits
-**I'm done** when they finish, and the office OKs the hours and runs payroll.
+Sprinkler, landscape lighting and drainage work. The office puts the day's jobs
+on the board; the crew open it on their phone, see where they are going and what
+needs doing, clock on and off, and close the job out with what they used. The
+office OKs the hours, puts announcements out, and runs payroll.
 
-It is built for people who do not want to fight with a screen: big buttons,
-plain words, nothing hidden behind menus.
-
-Runs with **no dependencies to install** — just Node 22.5 or newer — and keeps
-everything in one SQLite file you can copy or back up.
+No dependencies to install — Node 22.5 or newer and nothing else. Everything
+lives in one SQLite file you can copy or back up.
 
 ## Getting started
 
 ```bash
-node --version      # must be 22.5 or newer
-npm run setup       # make the office account (asks a name, a sign-in name, a number)
+node --version      # 22.5 or newer
+npm run setup       # make the office account
 npm start           # http://localhost:3000
 ```
 
-Sign in as the office, open **The crew**, and add each person with a sign-in
-name and a starting number. Give them the address, their sign-in name and their
-number. They can change the number themselves.
+Sign in as the office, open **The crew**, and add everybody with a sign-in name
+and a starting number. Hand each person the address, their name and their
+number — they can change the number themselves.
 
-To poke at it before putting anything real in:
+To try it before putting anything real in:
 
 ```bash
-node scripts/demo.js
+npm run sample
 ```
 
-That loads a sample crew with a few jobs and prints the sign-ins. Delete
-`data/timesheets.db` to wipe it and start clean.
+That loads a sample crew, three jobs and a couple of announcements, and prints
+the sign-ins. Delete `data/custom-outdoor.db` to wipe it and start again.
 
-## How a day runs
+## What the crew see
 
-**The office** opens **Give out work**, writes the job, the address and
-anything they need to know ("gate code 4471, valve box is by the driveway"),
-ticks who is doing it, and puts it on their list.
+Their own jobs for the day, and nothing else. Each job shows:
 
-**The crew** open the app and see their jobs for the day. Then either
+- the **type of work** as a colour chip — sprinkler, lighting or drainage — so
+  they can tell at a glance what they are walking into
+- the customer, the **address as a tap-to-open map link**, and the
+  **phone number as a tap-to-call link**
+- what needs doing, gate codes and the like
+- roughly how long the office thinks it takes
+- who else is on the job with them
 
-- **Start this job** when they get on site, and **I'm done** when they finish —
-  the finish time is filled in for them but they can change it, and they type
-  the break in minutes or tap one of the quick buttons; or
-- **Start something that is not on the list** for a call-out nobody wrote down; or
-- **Put hours down by hand** if they forgot to hit start. That one stays open so
-  they can put in three houses in a row without reopening it.
+Then: **Start this job**, and **I'm done** when they finish. The finish time is
+filled in but they can change it, the break is typed in minutes with quick
+buttons for the usual amounts, and they can say what they got done.
 
-Either way the hours land in the office's **Waiting on you** pile.
+They can also:
 
-**The office** hits *These look right*, or *Ask about it* with a question
-("you finished at 15:00, not 16:00"). A question shows up in red on that
-person's phone; when they fix the times it comes straight back. Hours the
-office OK'd are locked — only the office can put them back.
+- **Mark the job finished** with how it went and the parts used, which is what
+  the office bills from
+- **Start something not on the list** for a callback nobody wrote down
+- **Put hours down by hand** if they forgot to hit start — that one stays open
+  so three houses in a row go in one after another
+- fix the start time, change times, or throw away a shift started by mistake
+- read announcements, and the office can see who has
 
-## Getting the hours out
+## What the office sees
 
-**Payroll** totals everyone over any stretch of dates, works out the pay from
-each person's hourly rate, and **Download CSV** gives one row per job for
-whoever does the books.
+- **Today** — how many are out on jobs, hours down, labour cost, and the board
+  for the day: every job with its crew, whether it is started, being worked on
+  or finished, and the notes and parts that came back from the field.
+- **Hours** — everything sent in, waiting to be OK'd. *These look right*, or
+  *Ask about it* with a question. The question shows in red on that person's
+  phone; when they fix the times it comes straight back.
+- **Give out work** — customer, address, phone, type of work, the day, roughly
+  how long, what needs doing, and who is going. More than one person can be put
+  on the same job. Existing jobs can be changed or moved to another crew.
+- **Announcements** — put something out to everybody, mark it important so it
+  sits at the top in colour, and see who has actually read it.
+- **The crew** — add people, change rates, set a new sign-in number, take
+  somebody off (their hours are kept, they just cannot sign in).
+- **Payroll** — totals per person over any dates, with pay from their rate, and
+  a CSV for whoever does the books.
 
 ## Things worth knowing
 
 - **Hours work themselves out.** Finish minus start, minus the unpaid break.
-  A finish time earlier than the start is treated as work that ran past
-  midnight (22:00 to 06:00 is eight hours). If that comes out over 16 hours it
-  is refused as a typo, so nobody accidentally banks a 23-hour day.
-- **Times are stored as plain dates and clock times**, exactly as they were put
-  in. There is no timezone conversion to go wrong. "Today" comes from the
-  crew's own phone.
+  A finish earlier than the start is treated as work past midnight (21:00 to
+  05:00 is eight hours). If that comes out over 16 hours it is refused as a
+  typo, so nobody banks a 23-hour day by mistake.
+- **Times are stored exactly as entered** — plain dates and clock times, no
+  timezone conversion to go wrong. "Today" comes from the crew's own phone.
+- **A job can have a crew of two or three.** Everybody on it sees it, and each
+  person's hours are their own.
+- **Starting work moves a job to "being worked on"** by itself, so the office
+  can see what is live without ringing anybody.
 - **Nobody sees anyone else's hours** except the office, and people can only log
-  against jobs on their own list (or something they type themselves).
-- **Sign-in numbers are hashed** (scrypt) and never stored as plain text. If
-  somebody forgets theirs, use **New number** on the crew list — that also signs
-  them out everywhere.
-- **Taking somebody off** keeps all their old hours for payroll but stops them
-  signing in.
+  against jobs they are on, or something they type themselves.
+- **Sign-in numbers are hashed** (scrypt), never stored as text. A new number
+  signs that person out everywhere.
 - **Weeks run Monday to Sunday.**
 
 ## Settings
-
-All optional, set as environment variables:
 
 | Variable | Default | What it does |
 |---|---|---|
 | `PORT` | `3000` | Port to listen on |
 | `HOST` | `0.0.0.0` | Interface to bind to |
-| `DB_FILE` | `data/timesheets.db` | Where the database lives |
+| `DB_FILE` | `data/custom-outdoor.db` | Where the database lives |
 | `TZ` | system | Timezone the server calls "today" |
 
-Money showing in the wrong currency: change `CASH` at the top of
-`public/js/api.js` to `GBP`, `EUR`, `AUD` and so on.
+Not in dollars? Change `CASH` at the top of `public/js/common.js`.
 
-The company name across the top is in the three page files
-(`public/index.html`, `public/app.html`, `public/office.html`) — search for
-`Crew hours` and the line under it.
+The company name sits in the three page files (`public/index.html`,
+`public/crew.html`, `public/office.html`) and in the two page scripts — search
+for `Custom Outdoor Design`.
 
-The pages ask Google Fonts for Roboto Slab and Source Sans 3. If that is
-blocked or the phone has no signal, they fall back to fonts already on the
-device and everything still works.
+The pages ask Google Fonts for Bitter and Archivo. With no signal they fall back
+to fonts already on the phone and everything still works.
 
 ## Putting it where the crew can reach it
 
-They need to get to it from their phones, so it has to run somewhere they can
-reach — a cheap VPS, a box in the office, or any host that runs Node.
+It has to run somewhere their phones can get to — a cheap VPS, a box in the
+office, anything that runs Node.
 
 **Put it behind HTTPS.** Signing in sends their number, and the session cookie
-is only marked `Secure` when the request arrives over HTTPS. The simplest route
-is a reverse proxy (Caddy or nginx) doing TLS in front of `localhost:3000` and
+is only marked `Secure` when the request arrives over HTTPS. Easiest is a
+reverse proxy (Caddy or nginx) doing TLS in front of `localhost:3000` and
 forwarding `X-Forwarded-Proto`. Do not put port 3000 straight on the internet.
 
-Back up `data/timesheets.db` — that one file is every hour anybody has worked.
+Back up `data/custom-outdoor.db` — that one file is every hour anybody worked.
 
-## Running the tests
+## Tests
 
 ```bash
 npm test
 ```
 
-Covers the hours arithmetic (breaks, work past midnight, rounding), the whole
-give-out-work → log → OK → payroll run, work that was never on a list, and that
-the crew cannot reach the office side or change hours already OK'd.
+29 tests covering the hours arithmetic (breaks, work past midnight, rounding),
+a whole day from giving out a job through to payroll, two people on one job,
+work that was never on a list, announcements and who read them, a job running
+over two days, and the boundaries: the crew cannot reach the office side, cannot
+log against somebody else's job, and cannot change hours already OK'd.
 
 ## Layout
 
@@ -127,14 +139,14 @@ the crew cannot reach the office side or change hours already OK'd.
 server.js            HTTP server and router
 src/db.js            SQLite schema
 src/auth.js          sign-in numbers and sessions
-src/hours.js         date and time arithmetic
+src/time.js          date and time arithmetic
 src/validate.js      checking what comes in
-src/entries.js       shared queries for hours
+src/queries.js       shared job and shift queries
 src/routes/          sign-in, crew and office endpoints
 public/index.html    sign in
-public/app.html      the crew screen
+public/crew.html     the crew screen
 public/office.html   the office screen
 scripts/setup.js     makes the first office account
-scripts/demo.js      loads a sample crew
+scripts/sample.js    loads sample data
 test/                the tests
 ```

@@ -1,368 +1,484 @@
 'use strict';
 
-/* The office screen. Approve hours, hand out work, run payroll. */
+/* The office screen. Hand out work, keep an eye on the day, OK hours, post
+   announcements, run payroll. */
 
-var TABS = ['day', 'waiting', 'work', 'crew', 'pay'];
+var TABS = ['today', 'hours', 'jobs', 'notices', 'crew', 'pay'];
 
 var view = {
   me: null,
-  tab: 'day',
+  tab: 'today',
   day: today(),
+  jobsTo: null,
   payFrom: mondayOf(today()),
-  payTo: shiftDay(mondayOf(today()), 6),
+  payTo: shiftDate(mondayOf(today()), 6),
   payWho: '',
-  crew: [],
-  notice: null,
-  data: {}
+  people: [],
+  data: {},
+  flash: null,
+  editingJob: null,
 };
 
-/* ------------------------------ loading ---------------------------- */
+/* ----------------------------- loading ---------------------------- */
 
-function loadCrew() {
-  return api('/api/admin/workers?include_inactive=1').then(function (r) {
-    view.crew = r.workers;
-  });
+function loadPeople() {
+  return api('/api/office/people?include_past=1').then(function (r) { view.people = r.people; });
+}
+
+function fetchTab() {
+  if (view.tab === 'today') return api('/api/office/day?date=' + view.day);
+  if (view.tab === 'hours') return api('/api/office/waiting');
+  if (view.tab === 'jobs') {
+    var to = view.jobsTo || shiftDate(view.day, 13);
+    return api('/api/office/jobs?from=' + view.day + '&to=' + to);
+  }
+  if (view.tab === 'notices') return api('/api/office/notices');
+  if (view.tab === 'crew') return loadPeople().then(function () { return {}; });
+
+  var q = '?from=' + view.payFrom + '&to=' + view.payTo +
+    (view.payWho ? '&employee_id=' + view.payWho : '');
+  return api('/api/office/payroll' + q);
 }
 
 function load() {
-  var jobs = {
-    day: function () { return api('/api/admin/overview?date=' + view.day); },
-    waiting: function () { return api('/api/admin/pending'); },
-    work: function () {
-      return api('/api/admin/jobs?from=' + view.day + '&to=' + shiftDay(view.day, 13));
-    },
-    crew: function () { return loadCrew().then(function () { return {}; }); },
-    pay: function () {
-      var q = '?from=' + view.payFrom + '&to=' + view.payTo +
-        (view.payWho ? '&worker_id=' + view.payWho : '');
-      return api('/api/admin/report' + q);
-    }
-  };
-
-  return Promise.all([jobs[view.tab](), api('/api/admin/pending')])
+  return Promise.all([fetchTab(), api('/api/office/waiting')])
     .then(function (both) {
       view.data = both[0];
-      var badge = document.getElementById('waiting-count');
-      badge.textContent = both[1].entries.length ? '(' + both[1].entries.length + ')' : '';
+      var pip = document.getElementById('hours-pip');
+      pip.textContent = both[1].shifts.length ? '(' + both[1].shifts.length + ')' : '';
       paint();
     })
-    .catch(function (err) { flash(err.message, 'bad'); });
+    .catch(function (err) { say(err.message, 'bad'); });
 }
 
-function flash(message, kind) {
-  view.notice = message ? { message: message, kind: kind || 'good' } : null;
+function say(message, kind) {
+  view.flash = message ? { message: message, kind: kind || 'good' } : null;
   paint();
 }
 
-function after(promise, message) {
+function then(promise, message) {
   return promise.then(function () {
-    view.notice = message ? { message: message, kind: 'good' } : null;
+    view.flash = message ? { message: message, kind: 'good' } : null;
     return load();
-  }).catch(function (err) { flash(err.message, 'bad'); });
+  }).catch(function (err) { say(err.message, 'bad'); });
 }
 
 function goTab(tab) {
   view.tab = tab;
-  view.notice = null;
+  view.flash = null;
+  view.editingJob = null;
   TABS.forEach(function (t) {
     document.getElementById('tab-' + t).setAttribute('aria-selected', String(t === tab));
   });
   load();
 }
 
-/* ------------------------------ painting --------------------------- */
+/* ----------------------------- painting --------------------------- */
 
 function paint() {
-  var sheet = empty(document.getElementById('sheet'));
+  var sheet = emptyOut(document.getElementById('sheet'));
 
-  if (view.tab === 'day' || view.tab === 'waiting' || view.tab === 'work') {
+  if (view.tab === 'today' || view.tab === 'jobs') {
     sheet.appendChild(make('div', { class: 'daybar' },
-      make('button', { class: 'line', 'aria-label': 'Day before',
-        onclick: function () { view.day = shiftDay(view.day, -1); load(); } }, '‹'),
-      make('h1', {}, fullDay(view.day),
-        view.day !== today() && make('em', { text: 'not today' })),
-      make('button', { class: 'line', 'aria-label': 'Day after',
-        onclick: function () { view.day = shiftDay(view.day, 1); load(); } }, '›')));
+      make('button', { class: 'slim', 'aria-label': 'Day before',
+        onclick: function () { view.day = shiftDate(view.day, -1); load(); } }, '‹'),
+      make('h1', {}, longDate(view.day), view.day !== today() && make('em', { text: 'not today' })),
+      make('button', { class: 'slim', 'aria-label': 'Day after',
+        onclick: function () { view.day = shiftDate(view.day, 1); load(); } }, '›')));
   }
 
-  if (view.notice) {
-    sheet.appendChild(make('div', { class: 'notice ' + view.notice.kind, text: view.notice.message }));
+  if (view.flash) {
+    sheet.appendChild(make('div', { class: 'flash ' + view.flash.kind, text: view.flash.message }));
   }
 
-  if (view.tab === 'day') paintDay(sheet);
-  else if (view.tab === 'waiting') paintWaiting(sheet);
-  else if (view.tab === 'work') paintWork(sheet);
-  else if (view.tab === 'crew') paintCrew(sheet);
-  else paintPay(sheet);
+  ({
+    today: paintToday,
+    hours: paintHours,
+    jobs: paintJobs,
+    notices: paintNotices,
+    crew: paintCrew,
+    pay: paintPay,
+  })[view.tab](sheet);
 }
 
-/* ------------------------------- the day --------------------------- */
+/* ------------------------------ today ----------------------------- */
 
-function paintDay(sheet) {
+function paintToday(sheet) {
   var d = view.data;
 
-  sheet.appendChild(card('How the day looks', [], strip([
-    { value: d.totals.hours.toFixed(2), label: 'Hours this day' },
-    { value: String(d.running), label: 'Out on jobs now' },
-    { value: String(d.pending_all_time), label: 'Waiting on you' },
-    { value: CASH.format(d.totals.pay), label: 'Labour this day' }
+  sheet.appendChild(panel('How the day looks', [], figures([
+    { value: String(d.jobs.length), label: 'Jobs today' },
+    { value: String(d.on_the_clock.length), label: 'Out on jobs now' },
+    { value: d.totals.hours.toFixed(2), label: 'Hours down' },
+    { value: String(d.waiting), label: 'Hours to OK' },
+    { value: CASH.format(d.totals.pay), label: 'Labour today' },
   ])));
 
-  sheet.appendChild(card('Work given out for ' + briefDay(view.day), [],
-    d.jobs.length
-      ? make('ul', { class: 'rows' }, d.jobs.map(function (job) {
-          return make('li', { style: 'grid-template-columns:4px 1fr auto' },
-            make('div', { class: 'tick ' + (job.entry_count ? 'approved' : '') }),
-            make('div', {},
-              make('div', { class: 'task', text: job.title }),
-              make('div', { class: 'span', text: job.worker_name +
-                (job.location ? '  ·  ' + job.location : '') }),
-              job.notes && make('div', { class: 'said', text: job.notes })),
-            make('div', { class: 'figure' },
-              make('small', { text: job.entry_count ? 'hours in' : 'nothing yet' })));
-        }))
-      : make('div', { class: 'pad' },
-          make('p', { class: 'none', text: 'No work given out for this day.' }))));
+  if (d.on_the_clock.length) {
+    sheet.appendChild(panel('Out on jobs right now',
+      [make('span', { class: 'pip', text: String(d.on_the_clock.length) })],
+      make('ul', { class: 'rows' }, d.on_the_clock.map(function (s) {
+        return hourRow(s, { withName: true });
+      }))));
+  }
 
-  sheet.appendChild(card('Everything down for ' + briefDay(view.day), [],
-    d.entries.length
-      ? make('ul', { class: 'rows' }, d.entries.map(function (e) {
-          return hourRow(e, { withName: true, withPay: true, buttons: entryButtons(e) });
+  sheet.appendChild(panel('The board · ' + shortDate(view.day), [
+    make('span', { class: 'dim', style: 'font-size:15px',
+      text: d.job_counts.assigned + ' not started · ' + d.job_counts.working +
+            ' going · ' + d.job_counts.done + ' finished' }),
+  ],
+    d.jobs.length
+      ? make('ul', { class: 'jobs' }, d.jobs.map(officeJobItem))
+      : make('div', { class: 'pad' },
+          make('p', { class: 'none', text: 'No work on the board for this day.' }))));
+
+  sheet.appendChild(panel('Hours put down for ' + shortDate(view.day), [],
+    d.shifts.length
+      ? make('ul', { class: 'rows' }, d.shifts.map(function (s) {
+          return hourRow(s, { withName: true, withPay: true, buttons: shiftButtons(s) });
         }))
       : make('div', { class: 'pad' },
           make('p', { class: 'none', text: 'Nothing down for this day.' }))));
 }
 
-function entryButtons(e) {
+function officeJobItem(job) {
+  return make('li', {}, make('div', { class: 'bar ' + job.status }), make('div', {},
+    make('div', { class: 'jobline' },
+      kindChip(job.kind),
+      make('span', { class: 'state ' + (job.status === 'done' ? 'ok' : job.status === 'working' ? 'open' : 'sent'),
+        style: 'margin-top:0', text: JOB_WORDS[job.status] })),
+    make('h3', { text: job.customer }),
+    job.address && make('p', { class: 'jobmeta' }, addressLink(job.address)),
+    make('p', { class: 'mates',
+      text: 'On it: ' + (job.crew.map(function (c) { return c.name; }).join(', ') || 'nobody') }),
+    job.details && make('p', { class: 'jobdetail', text: job.details }),
+    job.status === 'done' && job.wrap_notes &&
+      make('p', { class: 'jobdetail', text: 'Wrapped up: ' + job.wrap_notes }),
+    job.status === 'done' && job.materials &&
+      make('p', { class: 'mates', text: 'Parts used: ' + job.materials }),
+    job.finished_by_name &&
+      make('p', { class: 'mates', text: 'Finished by ' + job.finished_by_name }),
+    make('div', { class: 'inline' },
+      make('button', { class: 'slim', style: 'margin:0',
+        onclick: function () { view.editingJob = job.id; goTab('jobs'); } }, 'Change it'),
+      make('button', { class: 'slim', style: 'margin:0',
+        onclick: function () { removeJob(job); } }, 'Take it off'))));
+}
+
+function shiftButtons(s) {
   return [
-    e.status === 'submitted' && make('button', {
-      class: 'line go', style: 'margin:0', onclick: function () { okThese(e); }
-    }, 'These look right'),
-    e.status === 'submitted' && make('button', {
-      class: 'line', style: 'margin:0', onclick: function () { askAbout(e); }
-    }, 'Ask about it'),
-    e.status === 'approved' && make('button', {
-      class: 'line', style: 'margin:0',
+    s.status === 'sent' && make('button', { class: 'slim go', style: 'margin:0',
+      onclick: function () { okThese(s); } }, 'These look right'),
+    s.status === 'sent' && make('button', { class: 'slim', style: 'margin:0',
+      onclick: function () { askAbout(s); } }, 'Ask about it'),
+    s.status === 'ok' && make('button', { class: 'slim', style: 'margin:0',
       onclick: function () {
-        after(api('/api/admin/entries/' + e.id + '/reopen', { method: 'POST' }),
-          'Put back in the waiting pile.');
-      }
-    }, 'Put it back'),
-    e.status !== 'open' && make('button', {
-      class: 'line', style: 'margin:0', onclick: function () { editTimes(e); }
-    }, 'Change times'),
-    e.status !== 'open' && make('button', {
-      class: 'line', style: 'margin:0',
+        then(api('/api/office/shifts/' + s.id + '/reopen', { method: 'POST' }), 'Put back.');
+      } }, 'Put it back'),
+    s.status !== 'open' && make('button', { class: 'slim', style: 'margin:0',
+      onclick: function () { changeTimes(s); } }, 'Change times'),
+    s.status !== 'open' && make('button', { class: 'slim', style: 'margin:0',
       onclick: function () {
-        if (!confirm('Take ' + e.worker_name + "'s hours off for " + briefDay(e.work_date) + '?')) return;
-        after(api('/api/admin/entries/' + e.id, { method: 'DELETE' }), 'Taken off.');
-      }
-    }, 'Take it off')
+        if (!confirm("Take " + s.employee_name + "'s hours off for " + shortDate(s.work_date) + '?')) return;
+        then(api('/api/office/shifts/' + s.id, { method: 'DELETE' }), 'Taken off.');
+      } }, 'Take it off'),
   ];
 }
 
-function okThese(e) {
-  after(api('/api/admin/entries/' + e.id + '/approve', { method: 'POST', body: {} }),
-    "OK'd — " + e.hours.toFixed(2) + ' hours for ' + e.worker_name + '.');
+function okThese(s) {
+  then(api('/api/office/shifts/' + s.id + '/ok', { method: 'POST', body: {} }),
+    "OK'd — " + s.hours.toFixed(2) + ' hours for ' + s.employee_name + '.');
 }
 
-function askAbout(e) {
-  var q = prompt('What do you want to ask ' + e.worker_name + '?', '');
+function askAbout(s) {
+  var q = prompt('What do you want to ask ' + s.employee_name + '?', '');
   if (q === null) return;
-  after(api('/api/admin/entries/' + e.id + '/reject', {
-    method: 'POST',
-    body: { note: q.trim() || 'Please check these times.' }
-  }), 'Sent back to ' + e.worker_name + '.');
+  then(api('/api/office/shifts/' + s.id + '/question', {
+    method: 'POST', body: { question: q.trim() },
+  }), 'Sent back to ' + s.employee_name + '.');
 }
 
-function editTimes(e) {
-  var from = prompt('What time did they start? Like 07:30', e.start_time);
+function changeTimes(s) {
+  var from = prompt('What time did they start? Like 07:30', s.start_time);
   if (from === null) return;
-  var to = prompt('What time did they finish? Like 16:00', e.end_time || '');
+  var to = prompt('What time did they finish? Like 16:00', s.end_time || '');
   if (to === null) return;
-  var brk = prompt('How many minutes was the break?', String(e.break_minutes || 0));
+  var brk = prompt('How many minutes was the break?', String(s.break_minutes || 0));
   if (brk === null) return;
 
   from = from.trim();
   to = to.trim();
 
-  if (!TIME_LOOKS_RIGHT.test(from) || !TIME_LOOKS_RIGHT.test(to)) {
-    flash('Times go in like 07:30 or 16:00.', 'bad');
+  if (!TIME_SHAPE.test(from) || !TIME_SHAPE.test(to)) {
+    say('Times go in like 07:30 or 16:00.', 'bad');
     return;
   }
 
-  after(api('/api/admin/entries/' + e.id, {
-    method: 'PATCH',
-    body: { start_time: from, end_time: to, break_minutes: +brk || 0 }
+  then(api('/api/office/shifts/' + s.id, {
+    method: 'PATCH', body: { start_time: from, end_time: to, break_minutes: +brk || 0 },
   }), 'Times changed.');
 }
 
-/* ----------------------------- waiting ----------------------------- */
+function removeJob(job) {
+  var warn = job.status === 'assigned'
+    ? 'Take "' + job.customer + '" off the board?'
+    : 'Hours may already be against this job. They stay, but lose the customer name. Take it off?';
+  if (!confirm(warn)) return;
+  then(api('/api/office/jobs/' + job.id, { method: 'DELETE' }), 'Taken off the board.');
+}
 
-function paintWaiting(sheet) {
-  var list = view.data.entries;
+/* ------------------------------ hours ----------------------------- */
 
-  sheet.appendChild(card('Hours waiting on you',
-    list.length ? [make('span', { class: 'count', text: String(list.length) })] : [],
+function paintHours(sheet) {
+  var list = view.data.shifts;
+
+  sheet.appendChild(panel('Hours waiting on you',
+    list.length ? [make('span', { class: 'pip', text: String(list.length) })] : [],
     list.length
-      ? make('ul', { class: 'rows' }, list.map(function (e) {
-          return hourRow(e, { withName: true, withPay: true, buttons: entryButtons(e) });
+      ? make('ul', { class: 'rows' }, list.map(function (s) {
+          return hourRow(s, { withName: true, withPay: true, buttons: shiftButtons(s) });
         }))
       : make('div', { class: 'pad' },
           make('p', { class: 'none', text: 'Nothing waiting. All caught up.' })),
-    list.length ? strip([
+    list.length ? figures([
       { value: view.data.totals.hours.toFixed(2), label: 'Hours waiting' },
-      { value: CASH.format(view.data.totals.pay), label: 'Worth' }
+      { value: CASH.format(view.data.totals.pay), label: 'Worth' },
     ]) : null));
 }
 
-/* ---------------------------- giving work -------------------------- */
+/* ---------------------------- giving work ------------------------- */
 
-function paintWork(sheet) {
-  sheet.appendChild(giveOutCard());
+function paintJobs(sheet) {
+  var editing = view.editingJob
+    ? (view.data.jobs || []).filter(function (j) { return j.id === view.editingJob; })[0]
+    : null;
+
+  sheet.appendChild(jobForm(editing));
 
   var jobs = view.data.jobs || [];
 
-  sheet.appendChild(card('On the books · next two weeks', [],
+  sheet.appendChild(panel('On the board · ' + shortDate(view.data.from) + ' to ' +
+      shortDate(view.data.to), [],
     jobs.length
-      ? make('ul', { class: 'rows' }, jobs.map(function (job) {
-          return make('li', { style: 'grid-template-columns:4px 1fr auto' },
-            make('div', { class: 'tick ' + (job.entry_count ? 'approved' : '') }),
-            make('div', {},
-              make('div', { class: 'task', text: job.title }),
-              make('div', { class: 'span', text: briefDay(job.work_date) + '  ·  ' + job.worker_name +
-                (job.location ? '  ·  ' + job.location : '') }),
-              job.notes && make('div', { class: 'said', text: job.notes })),
-            make('div', {}, make('button', {
-              class: 'line', style: 'margin:0',
-              onclick: function () {
-                var warn = job.entry_count
-                  ? 'Hours are already down against this job. They stay, but lose the job name. Take it off the list?'
-                  : 'Take "' + job.title + '" off ' + job.worker_name + "'s list?";
-                if (!confirm(warn)) return;
-                after(api('/api/admin/jobs/' + job.id, { method: 'DELETE' }), 'Taken off the list.');
-              }
-            }, 'Take off')));
+      ? make('ul', { class: 'jobs' }, jobs.map(function (job) {
+          return make('li', {}, make('div', { class: 'bar ' + job.status }), make('div', {},
+            make('div', { class: 'jobline' }, kindChip(job.kind),
+              make('span', { class: 'dim', style: 'font-size:15px', text: shortDate(job.job_date) })),
+            make('h3', { text: job.customer }),
+            job.address && make('p', { class: 'jobmeta' }, addressLink(job.address)),
+            make('p', { class: 'mates',
+              text: 'On it: ' + (job.crew.map(function (c) { return c.name; }).join(', ') || 'nobody') }),
+            job.details && make('p', { class: 'jobdetail', text: job.details }),
+            make('div', { class: 'inline' },
+              make('button', { class: 'slim', style: 'margin:0',
+                onclick: function () { view.editingJob = job.id; paint(); window.scrollTo(0, 0); } },
+                'Change it'),
+              make('button', { class: 'slim', style: 'margin:0',
+                onclick: function () { removeJob(job); } }, 'Take it off'))));
         }))
       : make('div', { class: 'pad' },
-          make('p', { class: 'none', text: 'Nothing on the books for the next two weeks.' }))));
+          make('p', { class: 'none', text: 'Nothing on the board over these days.' }))));
 }
 
-function giveOutCard() {
-  var what = make('input', { id: 'give-what', maxlength: '120',
-    placeholder: 'Sprinkler zone 3 not coming on' });
-  var place = make('input', { id: 'give-where', maxlength: '200',
-    placeholder: '1420 Oak Hollow Dr' });
-  var planned = make('input', { type: 'number', id: 'give-hours', min: '0', max: '24',
-    step: '.5', placeholder: '4' });
-  var dayOn = make('input', { type: 'date', id: 'give-day', value: view.day });
-  var extra = make('textarea', { id: 'give-notes', maxlength: '1000',
-    placeholder: 'Gate code 4471. Check the valve box by the driveway.' });
+function jobForm(job) {
+  var customer = make('input', { id: 'job-customer', maxlength: '120',
+    placeholder: 'Weaver residence', value: job ? job.customer : '' });
+  var address = make('input', { id: 'job-address', maxlength: '200',
+    placeholder: '1420 Oak Hollow Dr', value: job && job.address ? job.address : '' });
+  var phone = make('input', { id: 'job-phone', maxlength: '40',
+    placeholder: '555-0142', value: job && job.phone ? job.phone : '' });
+  var when = make('input', { type: 'date', id: 'job-day', value: job ? job.job_date : view.day });
+  var est = make('input', { type: 'number', id: 'job-est', min: '0', max: '24', step: '.5',
+    placeholder: '4', value: job && job.est_hours != null ? String(job.est_hours) : '' });
+  var details = make('textarea', { id: 'job-details', maxlength: '2000',
+    placeholder: 'Zone 3 not coming on. Gate code 4471, valve box is by the driveway.' },
+    job && job.details ? job.details : '');
 
-  var live = view.crew.filter(function (c) { return c.active && c.role !== 'admin'; });
-
-  var ticks = make('div', { style: 'display:flex;flex-wrap:wrap;gap:10px 20px' },
-    live.map(function (c, i) {
-      var id = 'give-' + c.id;
-      return make('label', {
-        for: id,
-        style: 'display:flex;align-items:center;gap:8px;font-weight:600;margin:0'
-      }, make('input', {
-        type: 'checkbox', id: id, value: String(c.id), checked: i === 0,
-        style: 'width:auto;min-height:auto;margin:0'
-      }), c.name);
+  var kind = make('select', { id: 'job-kind' },
+    ['sprinkler', 'lighting', 'drainage', 'other'].map(function (k) {
+      return make('option', { value: k }, KIND_WORDS[k]);
     }));
+  kind.value = job ? job.kind : 'sprinkler';
 
-  if (!live.length) {
-    ticks = make('p', { class: 'none', text: 'Add somebody to the crew first.' });
-  }
+  var onJob = job ? job.crew.map(function (c) { return c.id; }) : [];
+  var crew = view.people.filter(function (p) { return p.active && p.role === 'crew'; });
 
-  return card('Give somebody a job', [], make('div', { class: 'pad' },
-    make('div', { class: 'field' }, make('label', { for: 'give-what', text: 'What is the job?' }), what),
-    make('div', { class: 'field' }, make('label', { for: 'give-where', text: 'Where is it?' }), place),
-    make('div', { class: 'pair', style: 'margin-bottom:14px' },
-      make('div', {}, make('label', { for: 'give-day', text: 'What day?' }), dayOn),
-      make('div', {}, make('label', { for: 'give-hours', text: 'About how many hours?' }), planned)),
+  var ticks = crew.length
+    ? make('div', { style: 'display:flex;flex-wrap:wrap;gap:10px 20px' },
+        crew.map(function (p, i) {
+          var id = 'on-' + p.id;
+          return make('label', {
+            for: id,
+            style: 'display:flex;align-items:center;gap:8px;font-weight:600;margin:0',
+          }, make('input', {
+            type: 'checkbox', id: id, value: String(p.id),
+            checked: job ? onJob.indexOf(p.id) >= 0 : i === 0,
+            style: 'width:auto;min-height:auto;margin:0',
+          }), p.name);
+        }))
+    : make('p', { class: 'none', text: 'Add somebody to the crew first.' });
+
+  var body = make('div', { class: 'pad' },
+    make('div', { class: 'field' }, make('label', { for: 'job-customer', text: 'Customer' }), customer),
+    make('div', { class: 'field' }, make('label', { for: 'job-address', text: 'Address' }), address),
+    make('div', { class: 'two', style: 'margin-bottom:13px' },
+      make('div', {}, make('label', { for: 'job-phone', text: 'Their phone' }), phone),
+      make('div', {}, make('label', { for: 'job-kind', text: 'Type of work' }), kind)),
+    make('div', { class: 'two', style: 'margin-bottom:13px' },
+      make('div', {}, make('label', { for: 'job-day', text: 'What day?' }), when),
+      make('div', {}, make('label', { for: 'job-est', text: 'About how many hours?' }), est)),
     make('div', { class: 'field' },
-      make('label', { for: 'give-notes', text: 'Anything they should know?' }), extra),
-    make('div', { class: 'field' }, make('label', { text: 'Who is doing it?' }), ticks),
+      make('label', { for: 'job-details', text: 'What needs doing' }), details),
+    make('div', { class: 'field' }, make('label', { text: 'Who is going?' }), ticks),
     make('button', {
       class: 'go',
       onclick: function () {
-        var ids = Array.prototype.slice.call(ticks.querySelectorAll('input:checked'))
+        var ids = Array.prototype.slice.call(body.querySelectorAll('input[type=checkbox]:checked'))
           .map(function (i) { return Number(i.value); });
 
-        if (!what.value.trim()) { flash('Say what the job is.', 'bad'); return; }
-        if (!ids.length) { flash('Tick who is doing it.', 'bad'); return; }
+        if (!customer.value.trim()) { say('Put the customer name in.', 'bad'); return; }
+        if (!ids.length) { say('Tick who is going.', 'bad'); return; }
 
-        after(api('/api/admin/jobs', {
-          method: 'POST',
-          body: {
-            title: what.value.trim(),
-            work_date: dayOn.value || view.day,
-            location: place.value.trim(),
-            notes: extra.value.trim(),
-            scheduled_hours: planned.value === '' ? null : Number(planned.value),
-            worker_ids: ids
-          }
-        }), 'On the list for ' + ids.length + (ids.length === 1 ? ' person.' : ' people.'));
-      }
-    }, 'Put it on their list')));
+        var payload = {
+          customer: customer.value.trim(),
+          address: address.value.trim(),
+          phone: phone.value.trim(),
+          kind: kind.value,
+          job_date: when.value || view.day,
+          est_hours: est.value === '' ? null : Number(est.value),
+          details: details.value.trim(),
+          crew_ids: ids,
+        };
+
+        view.editingJob = null;
+
+        then(job
+          ? api('/api/office/jobs/' + job.id, { method: 'PATCH', body: payload })
+          : api('/api/office/jobs', { method: 'POST', body: payload }),
+          job ? 'Job updated.' : 'On the board for ' + ids.length +
+            (ids.length === 1 ? ' person.' : ' people.'));
+      },
+    }, job ? 'Save the changes' : 'Put it on the board'));
+
+  if (job) {
+    body.appendChild(make('button', {
+      class: 'slim', style: 'width:100%',
+      onclick: function () { view.editingJob = null; paint(); },
+    }, 'Never mind'));
+  }
+
+  return panel(job ? 'Change this job' : 'Give out a job', [], body);
 }
 
-/* ------------------------------ the crew --------------------------- */
+/* --------------------------- announcements ------------------------ */
+
+function paintNotices(sheet) {
+  var title = make('input', { id: 'note-title', maxlength: '120',
+    placeholder: 'Freeze warning Thursday night' });
+  var body = make('textarea', { id: 'note-body', maxlength: '3000', style: 'min-height:120px',
+    placeholder: 'Blowouts move up a week. If you are on a sprinkler call before then, '
+      + 'talk the customer through shutting the backflow off.' });
+  var urgent = make('input', { type: 'checkbox', id: 'note-urgent',
+    style: 'width:auto;min-height:auto;margin:0' });
+
+  sheet.appendChild(panel('Put something out to the crew', [], make('div', { class: 'pad' },
+    make('div', { class: 'field' }, make('label', { for: 'note-title', text: 'Heading' }), title),
+    make('div', { class: 'field' }, make('label', { for: 'note-body', text: 'What you want to say' }), body),
+    make('label', { for: 'note-urgent',
+      style: 'display:flex;align-items:center;gap:9px;margin-bottom:13px' },
+      urgent, 'Mark it important — it goes to the top and sits in colour'),
+    make('button', {
+      class: 'go',
+      onclick: function () {
+        if (!title.value.trim() || !body.value.trim()) {
+          say('It needs a heading and something to say.', 'bad');
+          return;
+        }
+        then(api('/api/office/notices', {
+          method: 'POST',
+          body: { title: title.value.trim(), body: body.value.trim(), urgent: urgent.checked },
+        }), 'Put out to the crew.');
+      },
+    }, 'Send it out'))));
+
+  var list = view.data.notices || [];
+
+  sheet.appendChild(panel('What you have put out', [],
+    list.length
+      ? make('div', { class: 'pad' }, list.map(function (n) {
+          var seen = n.seen_by || [];
+          return make('div', { class: 'notice-card' + (n.urgent ? ' urgent' : '') },
+            make('h4', {}, n.title, !!n.urgent && make('span', { class: 'urgent-tag', text: 'Important' })),
+            make('p', { text: n.body }),
+            make('div', { class: 'when',
+              text: agoWords(n.posted_at) + ' · read by ' + seen.length + ' of ' + n.crew_count +
+                (seen.length ? ' (' + seen.join(', ') + ')' : '') }),
+            make('button', {
+              class: 'slim', style: 'margin-top:10px',
+              onclick: function () {
+                if (!confirm('Take "' + n.title + '" down?')) return;
+                then(api('/api/office/notices/' + n.id, { method: 'DELETE' }), 'Taken down.');
+              },
+            }, 'Take it down'));
+        }))
+      : make('div', { class: 'pad' },
+          make('p', { class: 'none', text: 'Nothing put out yet.' }))));
+}
+
+/* ------------------------------ the crew -------------------------- */
 
 function paintCrew(sheet) {
-  sheet.appendChild(addPersonCard());
+  sheet.appendChild(addPersonForm());
 
-  sheet.appendChild(card('The crew', [], make('div', { class: 'sideways' }, make('table', {},
+  sheet.appendChild(panel('Everybody', [], make('div', { class: 'scroller' }, make('table', {},
     make('thead', {}, make('tr', {},
       make('th', { text: 'Name' }),
       make('th', { text: 'Signs in as' }),
-      make('th', { class: 'n', text: 'Rate' }),
+      make('th', { class: 'r', text: 'Rate' }),
       make('th', { text: '' }))),
-    make('tbody', {}, view.crew.map(function (c) {
-      return make('tr', { style: c.active ? '' : 'opacity:.55' },
-        make('td', {}, c.name + (c.role === 'admin' ? ' (office)' : ''),
-          !c.active && make('span', { class: 'mark-state rejected', text: 'Not working here' })),
-        make('td', { text: c.username }),
-        make('td', { class: 'n', text: CASH.format(c.hourly_rate) }),
-        make('td', {}, make('div', { class: 'inarow', style: 'margin:0' },
-          make('button', { class: 'line', style: 'margin:0',
-            onclick: function () { changeRate(c); } }, 'Rate'),
-          make('button', { class: 'line', style: 'margin:0',
-            onclick: function () { newNumber(c); } }, 'New number'),
-          make('button', { class: 'line', style: 'margin:0',
-            onclick: function () { setWorking(c, !c.active); } },
-            c.active ? 'Take off' : 'Put back'))));
+    make('tbody', {}, view.people.map(function (p) {
+      return make('tr', { style: p.active ? '' : 'opacity:.55' },
+        make('td', {}, p.name + (p.role === 'office' ? ' (office)' : ''),
+          !p.active && make('span', { class: 'state question', text: 'Not working here' })),
+        make('td', { text: p.username }),
+        make('td', { class: 'r', text: CASH.format(p.hourly_rate) }),
+        make('td', {}, make('div', { class: 'inline', style: 'margin:0' },
+          make('button', { class: 'slim', style: 'margin:0',
+            onclick: function () { changeRate(p); } }, 'Rate'),
+          make('button', { class: 'slim', style: 'margin:0',
+            onclick: function () { newNumber(p); } }, 'New number'),
+          make('button', { class: 'slim', style: 'margin:0',
+            onclick: function () { setWorking(p, !p.active); } },
+            p.active ? 'Take off' : 'Put back'))));
     }))))));
 }
 
-function addPersonCard() {
+function addPersonForm() {
   var name = make('input', { id: 'add-name', maxlength: '80', placeholder: 'Ray Delgado' });
   var username = make('input', { id: 'add-user', maxlength: '32', autocapitalize: 'none',
     spellcheck: 'false', placeholder: 'ray' });
-  var pin = make('input', { id: 'add-pin', inputmode: 'numeric', maxlength: '10', placeholder: '4 to 10 digits' });
+  var pin = make('input', { id: 'add-pin', inputmode: 'numeric', maxlength: '10',
+    placeholder: '4 to 10 digits' });
   var rate = make('input', { type: 'number', id: 'add-rate', min: '0', step: '.25', value: '0' });
   var phone = make('input', { id: 'add-phone', maxlength: '40', placeholder: '(optional)' });
   var role = make('select', { id: 'add-role' },
-    make('option', { value: 'worker' }, 'Out on jobs'),
-    make('option', { value: 'admin' }, 'In the office'));
+    make('option', { value: 'crew' }, 'Out on jobs'),
+    make('option', { value: 'office' }, 'In the office'));
 
-  return card('Add somebody', [], make('div', { class: 'pad' },
-    make('div', { class: 'pair', style: 'margin-bottom:14px' },
+  return panel('Add somebody', [], make('div', { class: 'pad' },
+    make('div', { class: 'two', style: 'margin-bottom:13px' },
       make('div', {}, make('label', { for: 'add-name', text: 'Their name' }), name),
       make('div', {}, make('label', { for: 'add-user', text: 'What they type to sign in' }), username)),
-    make('div', { class: 'pair', style: 'margin-bottom:14px' },
+    make('div', { class: 'two', style: 'margin-bottom:13px' },
       make('div', {}, make('label', { for: 'add-pin', text: 'Starting number' }), pin),
       make('div', {}, make('label', { for: 'add-rate', text: 'Hourly rate' }), rate)),
-    make('div', { class: 'pair', style: 'margin-bottom:14px' },
+    make('div', { class: 'two', style: 'margin-bottom:13px' },
       make('div', {}, make('label', { for: 'add-phone', text: 'Phone' }), phone),
       make('div', {}, make('label', { for: 'add-role', text: 'Where they work' }), role)),
     make('button', {
       class: 'go',
       onclick: function () {
-        after(api('/api/admin/workers', {
+        then(api('/api/office/people', {
           method: 'POST',
           body: {
             name: name.value,
@@ -370,36 +486,36 @@ function addPersonCard() {
             pin: pin.value,
             hourly_rate: Number(rate.value || 0),
             role: role.value,
-            phone: phone.value
-          }
+            phone: phone.value,
+          },
         }), 'Added. Give them their sign-in name and number.');
-      }
+      },
     }, 'Add them')));
 }
 
-function changeRate(c) {
-  var asked = prompt('Hourly rate for ' + c.name, String(c.hourly_rate));
+function changeRate(p) {
+  var asked = prompt('Hourly rate for ' + p.name, String(p.hourly_rate));
   if (asked === null) return;
   var n = Number(asked);
-  if (!isFinite(n) || n < 0) { flash('That rate is not a number.', 'bad'); return; }
-  after(api('/api/admin/workers/' + c.id, { method: 'PATCH', body: { hourly_rate: n } }),
-    c.name + ' is now ' + CASH.format(n) + ' an hour.');
+  if (!isFinite(n) || n < 0) { say('That rate is not a number.', 'bad'); return; }
+  then(api('/api/office/people/' + p.id, { method: 'PATCH', body: { hourly_rate: n } }),
+    p.name + ' is now ' + CASH.format(n) + ' an hour.');
 }
 
-function newNumber(c) {
-  var pin = prompt('New sign-in number for ' + c.name + ' (4 to 10 digits)', '');
+function newNumber(p) {
+  var pin = prompt('New sign-in number for ' + p.name + ' (4 to 10 digits)', '');
   if (pin === null) return;
-  after(api('/api/admin/workers/' + c.id + '/pin', { method: 'POST', body: { pin: pin.trim() } }),
-    c.name + ' can sign in with that number now. They have been signed out everywhere.');
+  then(api('/api/office/people/' + p.id + '/pin', { method: 'POST', body: { pin: pin.trim() } }),
+    p.name + ' can sign in with that now. They have been signed out everywhere.');
 }
 
-function setWorking(c, active) {
-  if (!active && !confirm(c.name + ' will not be able to sign in. Their old hours are kept. Go ahead?')) return;
-  after(api('/api/admin/workers/' + c.id, { method: 'PATCH', body: { active: active } }),
-    active ? c.name + ' can sign in again.' : c.name + ' can no longer sign in.');
+function setWorking(p, active) {
+  if (!active && !confirm(p.name + ' will not be able to sign in. Their hours are kept. Go ahead?')) return;
+  then(api('/api/office/people/' + p.id, { method: 'PATCH', body: { active: active } }),
+    active ? p.name + ' can sign in again.' : p.name + ' can no longer sign in.');
 }
 
-/* ------------------------------ payroll ---------------------------- */
+/* ------------------------------ payroll --------------------------- */
 
 function paintPay(sheet) {
   var from = make('input', { type: 'date', id: 'pay-from', value: view.payFrom });
@@ -407,18 +523,18 @@ function paintPay(sheet) {
 
   var pick = make('select', { id: 'pay-who' },
     make('option', { value: '' }, 'Everybody'),
-    view.crew.map(function (c) { return make('option', { value: String(c.id) }, c.name); }));
+    view.people.map(function (p) { return make('option', { value: String(p.id) }, p.name); }));
   pick.value = view.payWho;
 
-  var csv = '/api/admin/report.csv?from=' + view.payFrom + '&to=' + view.payTo +
-    (view.payWho ? '&worker_id=' + view.payWho : '');
+  var csv = '/api/office/payroll.csv?from=' + view.payFrom + '&to=' + view.payTo +
+    (view.payWho ? '&employee_id=' + view.payWho : '');
 
-  sheet.appendChild(card('Pick the dates', [], make('div', { class: 'pad' },
-    make('div', { class: 'pair', style: 'margin-bottom:14px' },
+  sheet.appendChild(panel('Pick the dates', [], make('div', { class: 'pad' },
+    make('div', { class: 'two', style: 'margin-bottom:13px' },
       make('div', {}, make('label', { for: 'pay-from', text: 'From' }), from),
       make('div', {}, make('label', { for: 'pay-to', text: 'To' }), to)),
     make('div', { class: 'field' }, make('label', { for: 'pay-who', text: 'Who?' }), pick),
-    make('div', { class: 'inarow' },
+    make('div', { class: 'inline' },
       make('button', { class: 'go', onclick: function () {
         view.payFrom = from.value || view.payFrom;
         view.payTo = to.value || view.payTo;
@@ -427,61 +543,67 @@ function paintPay(sheet) {
       } }, 'Show it'),
       make('button', { onclick: function () {
         view.payFrom = mondayOf(today());
-        view.payTo = shiftDay(view.payFrom, 6);
+        view.payTo = shiftDate(view.payFrom, 6);
         load();
       } }, 'This week'),
       make('button', { onclick: function () {
-        view.payFrom = shiftDay(mondayOf(today()), -7);
-        view.payTo = shiftDay(view.payFrom, 6);
+        view.payFrom = shiftDate(mondayOf(today()), -7);
+        view.payTo = shiftDate(view.payFrom, 6);
         load();
       } }, 'Last week'),
-      make('a', { class: 'button line', href: csv, style: 'margin:0;display:inline-flex;align-items:center' },
-        'Download CSV')))));
+      make('a', { class: 'linkout', href: csv,
+        style: 'align-self:center;padding:10px 4px' }, 'Download CSV')))));
 
   var rows = view.data.rows || [];
 
-  sheet.appendChild(card('What each person is owed', [],
+  sheet.appendChild(panel('What each person is owed', [],
     rows.length
-      ? make('div', { class: 'sideways' }, make('table', {},
+      ? make('div', { class: 'scroller' }, make('table', {},
           make('thead', {}, make('tr', {},
             make('th', { text: 'Name' }),
-            make('th', { class: 'n', text: 'Rate' }),
-            make('th', { class: 'n', text: 'Jobs' }),
-            make('th', { class: 'n', text: "OK'd" }),
-            make('th', { class: 'n', text: 'Waiting' }),
-            make('th', { class: 'n', text: 'Hours' }),
-            make('th', { class: 'n', text: 'Pay' }))),
+            make('th', { class: 'r', text: 'Rate' }),
+            make('th', { class: 'r', text: 'Jobs' }),
+            make('th', { class: 'r', text: "OK'd" }),
+            make('th', { class: 'r', text: 'Waiting' }),
+            make('th', { class: 'r', text: 'Hours' }),
+            make('th', { class: 'r', text: 'Pay' }))),
           make('tbody', {}, rows.map(function (r) {
             return make('tr', {},
-              make('td', { text: r.worker_name }),
-              make('td', { class: 'n', text: CASH.format(r.hourly_rate) }),
-              make('td', { class: 'n', text: String(r.entries) }),
-              make('td', { class: 'n', text: r.approved_hours.toFixed(2) }),
-              make('td', { class: 'n', text: r.pending_hours.toFixed(2) }),
-              make('td', { class: 'n', text: r.hours.toFixed(2) }),
-              make('td', { class: 'n', text: CASH.format(r.pay) }));
+              make('td', { text: r.name }),
+              make('td', { class: 'r', text: CASH.format(r.hourly_rate) }),
+              make('td', { class: 'r', text: String(r.shifts) }),
+              make('td', { class: 'r', text: r.ok_hours.toFixed(2) }),
+              make('td', { class: 'r', text: r.waiting_hours.toFixed(2) }),
+              make('td', { class: 'r', text: r.hours.toFixed(2) }),
+              make('td', { class: 'r', text: CASH.format(r.pay) }));
           })),
           make('tfoot', {}, make('tr', {},
             make('td', { text: 'Total' }),
             make('td', {}), make('td', {}),
-            make('td', { class: 'n', text: view.data.totals.approved_hours.toFixed(2) }),
+            make('td', { class: 'r', text: view.data.totals.ok_hours.toFixed(2) }),
             make('td', {}),
-            make('td', { class: 'n', text: view.data.totals.hours.toFixed(2) }),
-            make('td', { class: 'n', text: CASH.format(view.data.totals.pay) })))))
+            make('td', { class: 'r', text: view.data.totals.hours.toFixed(2) }),
+            make('td', { class: 'r', text: CASH.format(view.data.totals.pay) })))))
       : make('div', { class: 'pad' },
-          make('p', { class: 'none', text: 'No hours in over those dates.' }))));
+          make('p', { class: 'none', text: 'No hours over those dates.' }))));
 
-  var entries = view.data.entries || [];
+  var shifts = view.data.shifts || [];
 
-  sheet.appendChild(card('Every job over those dates', [],
-    entries.length
-      ? make('ul', { class: 'rows' }, entries.map(function (e) {
-          return hourRow(e, { withName: true, withPay: true, buttons: entryButtons(e) });
+  sheet.appendChild(panel('Every shift over those dates', [],
+    shifts.length
+      ? make('ul', { class: 'rows' }, shifts.map(function (s) {
+          return hourRow(s, { withName: true, withPay: true, buttons: shiftButtons(s) });
         }))
       : make('div', { class: 'pad' }, make('p', { class: 'none', text: 'Nothing to show.' }))));
 }
 
-/* ------------------------------- start ----------------------------- */
+/* ------------------------------- start ---------------------------- */
+
+document.getElementById('badge').append(
+  logoMark(30),
+  make('span', {},
+    make('b', { text: 'Custom Outdoor Design' }),
+    make('i', { text: 'Office' })));
 
 TABS.forEach(function (t) {
   document.getElementById('tab-' + t).addEventListener('click', function () { goTab(t); });
@@ -490,10 +612,10 @@ TABS.forEach(function (t) {
 document.getElementById('signout').appendChild(signOutButton());
 
 api('/api/me').then(function (r) {
-  if (r.user.role !== 'admin') { location.replace('/app.html'); return; }
+  if (r.user.role !== 'office') { location.replace('/crew.html'); return; }
   view.me = r.user;
   document.getElementById('me').textContent = r.user.name;
-  return loadCrew().then(load);
+  return loadPeople().then(load);
 }).catch(function (err) {
   document.getElementById('sheet').textContent = err.message;
 });

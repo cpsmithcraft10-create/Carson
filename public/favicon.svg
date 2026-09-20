@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Crew hours">
-  <rect width="32" height="32" rx="7" fill="#0d5b4c"/>
-  <path d="M16 6.2c3.7 4.3 6.5 8 6.5 11.1a6.5 6.5 0 0 1-13 0c0-3.1 2.8-6.8 6.5-11.1Z"
-        fill="none" stroke="#ffffff" stroke-width="2.1" stroke-linejoin="round"/>
-  <path d="M16 13.6v5.8" stroke="#ffffff" stroke-width="2.1" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Custom Outdoor Design">
+  <rect width="32" height="32" rx="7" fill="#17402e"/>
+  <path d="M16 6.5c3.6 4.2 6 7.4 6 10.2a6 6 0 0 1-12 0c0-2.8 2.4-6 6-10.2Z"
+        fill="none" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M16 13.4v5.6" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
 </svg>

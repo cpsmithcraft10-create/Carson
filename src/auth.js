@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 
 const SESSION_DAYS = 30;
-const COOKIE = 'ts_session';
+const COOKIE = 'cod_session';
 
 /** scrypt hash, stored as 'scrypt$<salt-hex>$<key-hex>'. */
 function hashPin(pin) {
@@ -12,7 +12,7 @@ function hashPin(pin) {
   return `scrypt$${salt.toString('hex')}$${key.toString('hex')}`;
 }
 
-function verifyPin(pin, stored) {
+function checkPin(pin, stored) {
   if (typeof stored !== 'string') return false;
   const [scheme, saltHex, keyHex] = stored.split('$');
   if (scheme !== 'scrypt' || !saltHex || !keyHex) return false;
@@ -22,24 +22,24 @@ function verifyPin(pin, stored) {
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 }
 
-function createSession(db, workerId) {
+function startSession(db, employeeId) {
   const token = crypto.randomBytes(32).toString('hex');
   const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
 
-  db.prepare('INSERT INTO sessions (token, worker_id, expires_at) VALUES (?, ?, ?)')
-    .run(token, workerId, expires);
+  db.prepare('INSERT INTO sessions (token, employee_id, expires_at) VALUES (?, ?, ?)')
+    .run(token, employeeId, expires);
 
   return token;
 }
 
-/** Returns the signed-in worker, or null. Expired rows are cleaned up as we go. */
-function sessionWorker(db, token) {
+/** The signed-in person, or null. Expired rows are tidied up on the way past. */
+function whoIs(db, token) {
   if (!token) return null;
 
   const row = db.prepare(`
-    SELECT s.token, s.expires_at, w.id, w.name, w.username, w.role, w.hourly_rate, w.active
+    SELECT s.expires_at, e.id, e.name, e.username, e.role, e.hourly_rate, e.active
       FROM sessions s
-      JOIN workers w ON w.id = s.worker_id
+      JOIN employees e ON e.id = s.employee_id
      WHERE s.token = ?
   `).get(token);
 
@@ -61,22 +61,15 @@ function sessionWorker(db, token) {
   };
 }
 
-function destroySession(db, token) {
+function endSession(db, token) {
   if (token) db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
 }
 
-/** Drops every session for a worker - used when their PIN changes or they are deactivated. */
-function destroyWorkerSessions(db, workerId) {
-  db.prepare('DELETE FROM sessions WHERE worker_id = ?').run(workerId);
+/** Signs someone out everywhere - used when their PIN changes or they leave. */
+function endAllSessions(db, employeeId) {
+  db.prepare('DELETE FROM sessions WHERE employee_id = ?').run(employeeId);
 }
 
 module.exports = {
-  hashPin,
-  verifyPin,
-  createSession,
-  sessionWorker,
-  destroySession,
-  destroyWorkerSessions,
-  SESSION_DAYS,
-  COOKIE,
+  SESSION_DAYS, COOKIE, hashPin, checkPin, startSession, whoIs, endSession, endAllSessions,
 };

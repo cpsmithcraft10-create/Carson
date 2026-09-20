@@ -1,16 +1,15 @@
 {
-  "name": "crew-hours",
+  "name": "custom-outdoor-design",
   "version": "1.0.0",
   "private": true,
-  "description": "Hours for an irrigation, drainage and lighting crew: the office gives out jobs, the crew clock them, the office OKs the hours and runs payroll.",
+  "description": "Crew app for Custom Outdoor Design: sprinkler, landscape lighting and drainage work. Jobs for the day, clocking in and out, and announcements from the office.",
   "type": "commonjs",
   "main": "server.js",
-  "engines": {
-    "node": ">=22.5.0"
-  },
+  "engines": { "node": ">=22.5.0" },
   "scripts": {
     "start": "node server.js",
     "setup": "node scripts/setup.js",
+    "sample": "node scripts/sample.js",
     "test": "node --test \"test/*.test.js\""
   },
   "license": "UNLICENSED"

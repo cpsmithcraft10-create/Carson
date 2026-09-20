@@ -4,33 +4,33 @@ const http = require('node:http');
 const { open } = require('./src/db');
 const auth = require('./src/auth');
 const {
-  HttpError, sendJson, sendText, readBody, parseCookies, serveStatic,
+  HttpError, sendJson, sendText, readBody, readCookies, serveFile,
 } = require('./src/http');
 
 const ROUTES = [
   ...require('./src/routes/auth'),
-  ...require('./src/routes/worker'),
-  ...require('./src/routes/admin'),
+  ...require('./src/routes/crew'),
+  ...require('./src/routes/office'),
 ].map((route) => ({
   ...route,
-  segments: route.path.split('/').filter(Boolean),
-  adminOnly: route.path.startsWith('/api/admin'),
+  parts: route.path.split('/').filter(Boolean),
+  officeOnly: route.path.startsWith('/api/office'),
 }));
 
-/** Matches '/api/my/entries/7' against '/api/my/entries/:id'. */
+/** Matches '/api/crew/shifts/7' against '/api/crew/shifts/:id'. */
 function match(method, pathname) {
   const parts = pathname.split('/').filter(Boolean);
 
   for (const route of ROUTES) {
-    if (route.method !== method || route.segments.length !== parts.length) continue;
+    if (route.method !== method || route.parts.length !== parts.length) continue;
 
     const params = {};
     let ok = true;
 
     for (let i = 0; i < parts.length; i += 1) {
-      const segment = route.segments[i];
-      if (segment.startsWith(':')) params[segment.slice(1)] = parts[i];
-      else if (segment !== parts[i]) { ok = false; break; }
+      const part = route.parts[i];
+      if (part.startsWith(':')) params[part.slice(1)] = parts[i];
+      else if (part !== parts[i]) { ok = false; break; }
     }
 
     if (ok) return { route, params };
@@ -53,7 +53,7 @@ function createApp(db) {
         sendText(res, 405, 'Method not allowed');
         return;
       }
-      serveStatic(req, res, url.pathname);
+      serveFile(req, res, url.pathname);
       return;
     }
 
@@ -64,30 +64,24 @@ function createApp(db) {
     }
 
     try {
-      const token = parseCookies(req.headers.cookie)[auth.COOKIE];
-      const user = auth.sessionWorker(db, token);
+      const token = readCookies(req.headers.cookie)[auth.COOKIE];
+      const user = auth.whoIs(db, token);
 
-      if (!found.route.public && !user) {
-        throw new HttpError(401, 'Please sign in again');
-      }
-      if (found.route.adminOnly && (!user || user.role !== 'admin')) {
-        throw new HttpError(403, 'Managers only');
+      if (!found.route.open && !user) throw new HttpError(401, 'Please sign in again');
+      if (found.route.officeOnly && (!user || user.role !== 'office')) {
+        throw new HttpError(403, 'That part is for the office');
       }
 
       const body = req.method === 'GET' || req.method === 'DELETE' ? {} : await readBody(req);
 
       const result = await found.route.handler({
-        req,
-        res,
-        db,
-        user,
-        token,
+        req, res, db, user, token,
         params: found.params,
         query: Object.fromEntries(url.searchParams),
         body,
       });
 
-      // A handler that wrote its own response (a file download) returns nothing.
+      // A handler that wrote its own response (the CSV) returns nothing.
       if (result !== undefined) sendJson(res, 200, result);
       else if (!res.writableEnded) res.writeHead(204).end();
     } catch (err) {
@@ -113,11 +107,9 @@ if (require.main === module) {
 
   const server = createServer(db);
   server.listen(port, host, () => {
-    const admins = db.prepare("SELECT COUNT(*) AS n FROM workers WHERE role = 'admin'").get().n;
-    console.log(`Crew hours running on http://localhost:${port}`);
-    if (admins === 0) {
-      console.log('No office account yet - run "npm run setup" to make one.');
-    }
+    const offices = db.prepare("SELECT COUNT(*) AS n FROM employees WHERE role = 'office'").get().n;
+    console.log(`Custom Outdoor Design running on http://localhost:${port}`);
+    if (offices === 0) console.log('No office account yet — run "npm run setup" to make one.');
   });
 
   for (const signal of ['SIGINT', 'SIGTERM']) {
