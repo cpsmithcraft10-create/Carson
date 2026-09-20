@@ -261,6 +261,79 @@ textarea { min-height: 82px; resize: vertical; font-size: 16.5px; }
 .kind.drainage  { background: var(--drainage-bg);  color: var(--drainage); }
 .kind.other     { background: var(--other-bg);     color: var(--other); }
 
+/* ---------------- tappable job list ---------------- */
+
+.picklist { list-style: none; margin: 0; padding: 0; }
+.picklist > li { border-top: 1px solid var(--line); }
+.picklist > li:first-child { border-top: 0; }
+
+.picklist .jobpick {
+  width: 100%;
+  margin: 0;
+  min-height: 0;
+  padding: 15px 16px;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-weight: 400;
+  font-size: 17px;
+  display: grid;
+  grid-template-columns: 5px 1fr auto;
+  gap: 0 13px;
+  align-items: center;
+}
+
+.picklist .jobpick:hover { background: var(--sunk); }
+.picklist .jobpick h3 { margin: 4px 0 2px; }
+.chev { font-size: 27px; line-height: 1; color: var(--ink-soft); }
+
+.tapnote { font-size: 14.5px; color: var(--ink-soft); margin-top: 6px; }
+
+/* ---------------- one job, in full ---------------- */
+
+.backrow { margin-bottom: 14px; }
+
+.backrow button {
+  width: auto; margin: 0; min-height: 46px;
+  font-size: 16px; font-weight: 600; padding: 9px 14px;
+}
+
+.needdoing {
+  background: var(--sunk);
+  border-radius: 7px;
+  padding: 14px 15px;
+  font-size: 17.5px;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.facts { list-style: none; margin: 0; padding: 0; }
+
+.facts > li {
+  display: grid;
+  grid-template-columns: 138px 1fr;
+  gap: 4px 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  font-size: 16.5px;
+}
+
+.facts > li:first-child { border-top: 0; }
+
+.facts .tag {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding-top: 2px;
+}
+
+@media (max-width: 470px) {
+  .facts > li { grid-template-columns: 1fr; }
+}
+
 /* ---------------- job cards ---------------- */
 
 .jobs { list-style: none; margin: 0; padding: 0; }
