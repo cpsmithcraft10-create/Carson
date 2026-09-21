@@ -21,6 +21,7 @@ var view = {
   byHand: false,
   offList: false,
   wrapping: false,
+  fixing: false,
   flash: null,
 };
 
@@ -73,6 +74,7 @@ function goTab(tab) {
   view.openJob = null;
   view.flash = null;
   view.closing = false;
+  view.fixing = false;
   view.byHand = false;
   view.offList = false;
   view.wrapping = false;
@@ -95,7 +97,8 @@ function paint() {
   });
 
   var pip = document.getElementById('unread-pip');
-  pip.textContent = view.unread ? '(' + view.unread + ')' : '';
+  pip.className = view.unread ? 'pipdot' : '';
+  pip.textContent = view.unread ? String(view.unread) : '';
 
   var sheet = emptyOut(document.getElementById('sheet'));
 
@@ -134,6 +137,7 @@ function goDay(d) {
   view.openJob = null;
   view.flash = null;
   view.closing = false;
+  view.fixing = false;
   view.byHand = false;
   view.offList = false;
   view.wrapping = false;
@@ -160,28 +164,18 @@ function paintJobList(sheet) {
 }
 
 function jobRow(job) {
-  var mates = job.crew.filter(function (c) { return c.id !== view.me.id; });
-  var bits = [];
-  if (job.est_hours > 0) bits.push('about ' + job.est_hours + ' hours');
-  if (mates.length > 0) bits.push('with ' + mates.map(function (c) { return c.name; }).join(', '));
-
   return make('li', {}, make('button', {
     class: 'jobpick',
     onclick: function () { openJob(job.id); },
   },
     make('span', { class: 'bar ' + job.status, style: 'align-self:stretch' }),
     make('span', {},
-      make('span', { class: 'jobline' },
-        kindChip(job.kind),
-        make('span', {
-          class: 'state ' + (job.status === 'done' ? 'ok' : job.status === 'working' ? 'open' : 'sent'),
-          style: 'margin-top:0', text: JOB_WORDS[job.status],
-        })),
+      make('span', { class: 'jobline' }, kindChip(job.kind)),
       make('h3', { text: job.customer }),
       job.address && make('span', { class: 'jobmeta', style: 'display:block', text: job.address }),
-      bits.length > 0 && make('span', { class: 'tapnote', style: 'display:block', text: bits.join(' · ') }),
-      make('span', { class: 'tapnote', style: 'display:block', text: 'Tap for what needs doing' })),
-    make('span', { class: 'chev', 'aria-hidden': 'true' }, '›')));
+      make('span', { class: 'progress ' + job.status, style: 'margin-top:6px',
+        text: JOB_WORDS[job.status] })),
+    make('span', { class: 'chev', 'aria-hidden': 'true' }, '\u203a')));
 }
 
 function offListBit() {
@@ -224,73 +218,46 @@ function paintOneJob(sheet, job) {
 
   sheet.appendChild(make('div', { class: 'backrow' },
     make('button', { onclick: function () { view.openJob = null; view.flash = null; paint(); } },
-      '‹ Back to today’s jobs')));
+      '\u2039 Back to jobs')));
 
   if (runningHere) sheet.appendChild(onClockCard(view.running, {}));
 
+  // Everything that is not the job itself goes in one quiet list underneath.
   var facts = [];
-  if (job.address) {
-    facts.push(make('li', {},
-      make('span', { class: 'tag', text: 'Where' }),
-      make('span', {}, addressLink(job.address),
-        make('span', { class: 'tapnote', style: 'display:block', text: 'Tap to open the map' }))));
-  }
-  if (job.phone) {
-    facts.push(make('li', {},
-      make('span', { class: 'tag', text: 'Customer phone' }),
-      make('span', {}, phoneLink(job.phone),
-        make('span', { class: 'tapnote', style: 'display:block', text: 'Tap to call' }))));
-  }
-  facts.push(make('li', {},
-    make('span', { class: 'tag', text: 'Day' }),
-    make('span', { text: longDate(job.job_date) })));
+
   if (job.est_hours > 0) {
-    facts.push(make('li', {},
-      make('span', { class: 'tag', text: 'Should take' }),
-      make('span', { text: 'About ' + job.est_hours + ' hours' })));
+    facts.push(['Should take', 'About ' + job.est_hours + ' hours']);
   }
   if (mates.length > 0) {
-    facts.push(make('li', {},
-      make('span', { class: 'tag', text: 'With you' }),
-      make('span', { text: mates.map(function (c) { return c.name; }).join(', ') })));
+    facts.push(['With you', mates.map(function (c) { return c.name; }).join(', ')]);
   }
   if (myHours > 0) {
-    facts.push(make('li', {},
-      make('span', { class: 'tag', text: 'Your hours on it' }),
-      make('span', { text: myHours.toFixed(2) + ' hours so far' })));
+    facts.push(['Your hours on it', myHours.toFixed(2) + ' so far']);
+  }
+  if (job.job_date !== today()) {
+    facts.push(['Day', longDate(job.job_date)]);
   }
   if (job.status === 'done') {
-    if (job.wrap_notes) {
-      facts.push(make('li', {},
-        make('span', { class: 'tag', text: 'Wrapped up' }),
-        make('span', { text: job.wrap_notes })));
-    }
-    if (job.materials) {
-      facts.push(make('li', {},
-        make('span', { class: 'tag', text: 'Parts used' }),
-        make('span', { text: job.materials })));
-    }
-    if (job.finished_by_name) {
-      facts.push(make('li', {},
-        make('span', { class: 'tag', text: 'Finished by' }),
-        make('span', { text: job.finished_by_name })));
-    }
+    if (job.wrap_notes) facts.push(['Wrapped up', job.wrap_notes]);
+    if (job.materials) facts.push(['Parts used', job.materials]);
+    if (job.finished_by_name) facts.push(['Finished by', job.finished_by_name]);
   }
 
-  var head = make('div', { class: 'pad' },
+  sheet.appendChild(panel('The job', [], make('div', { class: 'pad' },
     make('div', { class: 'jobline' },
       kindChip(job.kind),
-      make('span', {
-        class: 'state ' + (job.status === 'done' ? 'ok' : job.status === 'working' ? 'open' : 'sent'),
-        style: 'margin-top:0', text: JOB_WORDS[job.status],
-      })),
-    make('h3', { style: 'font-size:23px;margin-bottom:12px', text: job.customer }),
-    make('p', { class: 'tapnote', style: 'margin:0 0 6px;font-weight:700', text: 'What needs doing' }),
-    make('p', { class: 'needdoing',
+      make('span', { class: 'progress ' + job.status, text: JOB_WORDS[job.status] })),
+    make('h3', { style: 'font-size:var(--t-title);margin:10px 0 2px', text: job.customer }),
+    job.address && make('p', { class: 'jobmeta', text: job.address }),
+    make('p', { class: 'needdoing', style: 'margin-top:14px',
       text: job.details || 'The office did not leave any notes on this one.' }),
-    facts.length > 0 && make('ul', { class: 'facts', style: 'margin-top:14px' }, facts));
-
-  sheet.appendChild(panel('The job', [], head));
+    siteActions(job.address, job.phone),
+    facts.length > 0 && make('ul', { class: 'facts', style: 'margin-top:16px' },
+      facts.map(function (row) {
+        return make('li', {},
+          make('span', { class: 'tag', text: row[0] }),
+          make('span', { text: row[1] }));
+      })))));
 
   sheet.appendChild(jobActions(job, runningHere));
 
@@ -376,32 +343,45 @@ function onClockCard(shift, opts) {
     shift.job_address && make('p', { class: 'jobmeta', text: shift.job_address }),
     make('p', { class: 'ticker elapsed', id: 'elapsed',
       text: inWords(gap(shift.start_time, timeNow())) }),
-    make('p', { class: 'startedat' },
-      'Started at ' + clockTime(shift.start_time),
-      make('button', { class: 'asLink', onclick: function () { fixStart(shift); } }, 'change')));
+    make('p', { class: 'startedat', text: 'Started at ' + clockTime(shift.start_time) }));
 
   if (!view.closing) {
     box.appendChild(make('button', {
       class: 'stop', onclick: function () { view.closing = true; paint(); },
     }, "I'm done"));
 
-    // From the jobs list, offer a way through to the job this belongs to.
-    if (opts.compact && shift.job_id) {
-      box.appendChild(make('button', {
+    // Only one button at rest. The fiddly bits hide behind a quiet line.
+    var tuck = make('div', { class: 'tuck' });
+
+    if (!view.fixing) {
+      tuck.appendChild(make('button', {
+        class: 'more', onclick: function () { view.fixing = true; paint(); },
+      }, 'Something not right?'));
+    } else {
+      if (opts.compact && shift.job_id) {
+        tuck.appendChild(make('button', {
+          class: 'slim', style: 'width:100%',
+          onclick: function () { openJob(shift.job_id); },
+        }, 'See what this job needs'));
+      }
+      tuck.appendChild(make('button', {
         class: 'slim', style: 'width:100%',
-        onclick: function () { openJob(shift.job_id); },
-      }, 'See what this job needs'));
+        onclick: function () { fixStart(shift); },
+      }, 'I started earlier than it says'));
+      tuck.appendChild(make('button', {
+        class: 'slim', style: 'width:100%',
+        onclick: function () {
+          if (!confirm('Throw this away? No hours get counted.')) return;
+          then(api('/api/crew/shifts/' + shift.id, { method: 'DELETE' }),
+            'Thrown away. Nothing was counted.');
+        },
+      }, 'I started the wrong job'));
+      tuck.appendChild(make('button', {
+        class: 'more', onclick: function () { view.fixing = false; paint(); },
+      }, 'Never mind'));
     }
 
-    box.appendChild(make('button', {
-      class: 'slim', style: 'width:100%',
-      onclick: function () {
-        if (!confirm('Throw this away? No hours get counted.')) return;
-        then(api('/api/crew/shifts/' + shift.id, { method: 'DELETE' }),
-          'Thrown away. Nothing was counted.');
-      },
-    }, 'I started the wrong job'));
-
+    box.appendChild(tuck);
     return box;
   }
 
@@ -600,15 +580,12 @@ function weekCard() {
         make('thead', {}, make('tr', {},
           make('th', { text: 'Day' }),
           make('th', { text: 'Job' }),
-          make('th', { class: 'r', text: 'Hours' }),
-          make('th', { text: 'Where it is at' }))),
+          make('th', { class: 'r', text: 'Hours' }))),
         make('tbody', {}, w.shifts.map(function (s) {
           return make('tr', {},
             make('td', { text: shortDate(s.work_date) }),
             make('td', { text: s.what }),
-            make('td', { class: 'r', text: s.end_time ? s.hours.toFixed(2) : '—' }),
-            make('td', {}, make('span', { class: 'state ' + s.status,
-              style: 'margin-top:0', text: STATE_WORDS[s.status] })));
+            make('td', { class: 'r', text: s.end_time ? s.hours.toFixed(2) : '—' }));
         }))))
     : make('div', { class: 'pad' }, make('p', { class: 'none', text: 'Nothing down this week.' }));
 
@@ -684,7 +661,15 @@ function paintMe(sheet) {
 
   sheet.appendChild(panel('Signed in as', [], make('div', { class: 'pad' },
     make('h3', { text: view.me.name }),
-    make('p', { class: 'none', text: 'You type "' + view.me.username + '" to sign in.' }))));
+    make('p', { class: 'none', text: 'You type "' + view.me.username + '" to sign in.' }),
+    make('button', {
+      style: 'margin-top:16px',
+      onclick: function () {
+        api('/api/signout', { method: 'POST' })
+          .catch(function () { /* leaving anyway */ })
+          .then(function () { location.href = '/'; });
+      },
+    }, 'Sign out'))));
 }
 
 /* ------------------------------- start ---------------------------- */
@@ -694,8 +679,6 @@ document.getElementById('badge').append(
   make('span', {},
     make('b', { text: 'Custom Outdoor Design' }),
     make('i', { text: 'Sprinkler · Lighting · Drainage' })));
-
-document.getElementById('signout').appendChild(signOutButton());
 
 TABS.forEach(function (t) {
   document.getElementById('tab-' + t).addEventListener('click', function () { goTab(t); });

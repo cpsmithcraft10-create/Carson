@@ -221,6 +221,56 @@ function phoneLink(phone) {
   return make('a', { class: 'linkout', href: 'tel:' + phone.replace(/[^\d+]/g, '') }, phone);
 }
 
+/** A small line icon, drawn rather than loaded so it works with no signal. */
+function icon(name, size) {
+  var paths = {
+    pin: ['M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z', 'M12 12.4a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z'],
+    phone: ['M6.3 3.8h3l1.5 3.8-1.9 1.4a11 11 0 0 0 5.1 5.1l1.4-1.9 3.8 1.5v3a1.7 1.7 0 0 1-1.9 1.7C10.2 17.7 6.3 13.8 4.6 5.7a1.7 1.7 0 0 1 1.7-1.9Z'],
+  };
+
+  var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', size || 21);
+  svg.setAttribute('height', size || 21);
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('aria-hidden', 'true');
+
+  (paths[name] || []).forEach(function (d) {
+    var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '1.9');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+  });
+
+  return svg;
+}
+
+/** The two things somebody on site actually taps: the map and the phone. */
+function siteActions(address, phone) {
+  var bits = [];
+
+  if (address) {
+    bits.push(make('a', {
+      class: 'bigaction',
+      href: 'https://maps.google.com/?q=' + encodeURIComponent(address),
+      target: '_blank', rel: 'noopener',
+    }, icon('pin'), 'Open the map'));
+  }
+
+  if (phone) {
+    bits.push(make('a', {
+      class: 'bigaction',
+      href: 'tel:' + phone.replace(/[^\d+]/g, ''),
+    }, icon('phone'), 'Call the customer'));
+  }
+
+  if (!bits.length) return null;
+  return make('div', { class: 'actionrow' + (bits.length === 2 ? ' two-up' : '') }, bits);
+}
+
 /** One line of hours, used on both screens. */
 function hourRow(shift, opts) {
   opts = opts || {};

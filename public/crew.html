@@ -13,19 +13,51 @@
     <div class="top-in">
       <span class="badge" id="badge"></span>
       <span class="me" id="me"></span>
-      <span id="signout"></span>
     </div>
-    <nav class="tabs" role="tablist">
-      <button role="tab" id="tab-jobs" aria-selected="true">Today's jobs</button>
-      <button role="tab" id="tab-hours">My hours</button>
-      <button role="tab" id="tab-notices">From the office <span id="unread-pip"></span></button>
-      <button role="tab" id="tab-me">My sign-in</button>
-    </nav>
   </header>
 
   <main id="sheet" class="sheet">
     <p class="none">Loading&hellip;</p>
   </main>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" id="tab-jobs" aria-selected="true">
+      <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9 4.5h6v2H9z"/>
+        <path d="M9 5.5H6.8A1.8 1.8 0 0 0 5 7.3v11.9A1.8 1.8 0 0 0 6.8 21h10.4a1.8 1.8 0 0 0 1.8-1.8V7.3a1.8 1.8 0 0 0-1.8-1.8H15"/>
+        <path d="M8.8 11.5h6.4M8.8 15.5h4.2"/>
+      </svg>
+      <span>Jobs</span>
+    </button>
+
+    <button role="tab" id="tab-hours">
+      <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="8.2"/>
+        <path d="M12 7.4V12l3.1 1.9"/>
+      </svg>
+      <span>Hours</span>
+    </button>
+
+    <button role="tab" id="tab-notices">
+      <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4.5 9.6v4.8h3.2l7 3.9V5.7l-7 3.9H4.5Z"/>
+        <path d="M18 9.4a3.8 3.8 0 0 1 0 5.2"/>
+      </svg>
+      <span>Office</span><span id="unread-pip"></span>
+    </button>
+
+    <button role="tab" id="tab-me">
+      <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="8.4" r="3.6"/>
+        <path d="M5.2 20c0-3.5 3-5.8 6.8-5.8s6.8 2.3 6.8 5.8"/>
+      </svg>
+      <span>Me</span>
+    </button>
+  </nav>
 
   <script src="/js/common.js"></script>
   <script src="/js/crew.js"></script>
