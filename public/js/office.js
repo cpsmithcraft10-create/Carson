@@ -224,13 +224,13 @@ function paintWeek(sheet) {
       d.hours > 0 && make('p', { class: 'weekfoot', text: d.hours.toFixed(2) + ' h logged' }));
   }));
 
-  sheet.appendChild(panel('The board, seven days at a time', [
+  sheet.appendChild(panel('Schedule', [
     make('span', { class: 'dim', style: 'font-size:15px',
       text: w.totals.jobs + ' jobs · ' + w.totals.hours.toFixed(2) + ' hours · ' +
             CASH.format(w.totals.pay) }),
   ], make('div', { class: 'scroller' }, grid)));
 
-  sheet.appendChild(panel('Who is spoken for', [], make('div', { class: 'scroller' }, make('table', {},
+  sheet.appendChild(panel('Crew allocation', [], make('div', { class: 'scroller' }, make('table', {},
     make('thead', {}, make('tr', {},
       make('th', { text: 'Name' }),
       w.days.map(function (d) {
@@ -293,7 +293,7 @@ function newCustomerForm() {
   var notes = make('textarea', { id: 'cust-notes', maxlength: '2000',
     placeholder: 'Gate code 4471. Dog is friendly but loud. Bills quarterly.' });
 
-  return panel('Put somebody on the books', [], make('div', { class: 'pad' },
+  return panel('New customer', [], make('div', { class: 'pad' },
     make('div', { class: 'two', style: 'margin-bottom:13px' },
       make('div', {}, make('label', { for: 'cust-name', text: 'Their name' }), name),
       make('div', {}, make('label', { for: 'cust-phone', text: 'Phone' }), phone)),
@@ -316,7 +316,7 @@ function newCustomerForm() {
           },
         }), 'On the books. You can book them a job now.');
       },
-    }, 'Add them')));
+    }, 'Add customer')));
 }
 
 /**
@@ -327,13 +327,13 @@ function newCustomerForm() {
  */
 function bringInForm() {
   if (!view.bringingIn) {
-    return panel('Already have a customer list?', [], make('div', { class: 'pad' },
+    return panel('Import', [], make('div', { class: 'pad' },
       make('p', { class: 'none', style: 'margin-bottom:4px',
         text: 'Bring it in from the accounts, a spreadsheet or the phone instead of '
           + 'typing it all out again.' }),
       make('button', { class: 'slim', style: 'width:auto',
         onclick: function () { view.bringingIn = true; view.looked = null; paint(); } },
-        'Bring a list in')));
+        'Import a list')));
   }
 
   var box = make('textarea', {
@@ -411,7 +411,7 @@ function bringInForm() {
       make('label', { for: 'bring-fill', text: 'Anybody already on the books' }), fill),
     make('div', { class: 'inline' },
       make('button', { class: 'go', style: 'flex:1 1 200px',
-        onclick: function () { send(true); } }, 'Have a look first'),
+        onclick: function () { send(true); } }, 'Preview'),
       make('button', { class: 'slim', style: 'flex:0 0 auto',
         onclick: function () {
           view.bringingIn = false;
@@ -423,7 +423,7 @@ function bringInForm() {
 
   if (view.looked) body.appendChild(lookedAt(view.looked, send));
 
-  return panel('Bring a customer list in', [], body);
+  return panel('Import customers', [], body);
 }
 
 function broughtInWords(out) {
@@ -724,7 +724,7 @@ function billingSettings(s) {
 
   if (view.billKeys) body.appendChild(keysForm(s));
 
-  return panel('How billing works here',
+  return panel('Billing settings',
     [s.qbo_connected
       ? make('span', { class: 'state ok', text: 'Connected · ' + s.qbo_env })
       : make('span', { class: 'state question', text: 'Not connected' })],
@@ -789,7 +789,7 @@ function paintOneCustomer(sheet) {
       { value: CASH.format(totals.pay), label: 'Labour spent' },
     ])));
 
-  sheet.appendChild(panel('Everything done for them', [],
+  sheet.appendChild(panel('History', [],
     jobs.length
       ? make('ul', { class: 'jobs' }, jobs.map(officeJobItem))
       : make('div', { class: 'pad' },
@@ -860,28 +860,28 @@ function paintToday(sheet) {
   if (d.waiting > 0) {
     sheet.appendChild(make('div', { class: 'needsyou' },
       make('b', { text: d.waiting === 1
-        ? 'One set of hours is waiting on you'
-        : d.waiting + ' sets of hours are waiting on you' }),
+        ? 'One timesheet needs approving'
+        : d.waiting + ' timesheets need approving' }),
       make('button', { class: 'go', onclick: function () { goTab('hours'); } },
-        'Go through them')));
+        'Review')));
   }
 
   sheet.appendChild(make('div', { class: 'card' }, figures([
-    { value: String(d.jobs.length), label: d.jobs.length === 1 ? 'Job on' : 'Jobs on' },
-    { value: String(d.on_the_clock.length), label: 'Out there now' },
-    { value: d.totals.hours.toFixed(2), label: 'Hours down' },
-    { value: CASH.format(d.totals.pay), label: 'Labour' },
+    { value: String(d.jobs.length), label: d.jobs.length === 1 ? 'job' : 'jobs' },
+    { value: String(d.on_the_clock.length), label: 'on site now' },
+    { value: d.totals.hours.toFixed(2), label: 'hours logged' },
+    { value: CASH.format(d.totals.pay), label: 'labour cost' },
   ])));
 
   if (d.on_the_clock.length) {
-    sheet.appendChild(panel('On the clock right now',
+    sheet.appendChild(panel('On site now',
       [make('span', { class: 'pip', text: String(d.on_the_clock.length) })],
       make('ul', { class: 'rows' }, d.on_the_clock.map(function (s) {
         return hourRow(s, { withName: true, sameDay: s.work_date === view.day });
       }))));
   }
 
-  sheet.appendChild(panel('The work', [
+  sheet.appendChild(panel('Jobs', [
     make('span', { class: 'dim', style: 'font-size:15px',
       text: d.job_counts.assigned + ' not started · ' + d.job_counts.working +
             ' going · ' + d.job_counts.done + ' finished' }),
@@ -891,7 +891,7 @@ function paintToday(sheet) {
       : make('div', { class: 'pad' },
           make('p', { class: 'none', text: 'No work on the board for this day.' }))));
 
-  sheet.appendChild(panel('Hours put down', d.shifts.length
+  sheet.appendChild(panel('Hours', d.shifts.length
     ? [make('span', { class: 'dim', style: 'font-size:15px',
         text: d.totals.hours.toFixed(2) + ' hours · ' + CASH.format(d.totals.pay) })]
     : [],
@@ -937,10 +937,10 @@ function officeJobItem(job) {
       make('p', { class: 'mates', text: 'Finished by ' + job.finished_by_name }),
     make('div', { class: 'acts' },
       make('button', {
-        onclick: function () { view.editingJob = job.id; goTab('jobs'); } }, 'Change'),
-      make('button', { onclick: function () { repeatJob(job); } }, 'Put it out again'),
+        onclick: function () { view.editingJob = job.id; goTab('jobs'); } }, 'Edit'),
+      make('button', { onclick: function () { repeatJob(job); } }, 'Repeat'),
       make('button', { class: 'risky', onclick: function () { removeJob(job); } },
-        'Take it off'))));
+        'Delete'))));
 }
 
 /* Seasonal work is the same call round again: blowouts, startups, lamp checks. */
@@ -970,20 +970,20 @@ function repeatJob(job) {
 function shiftButtons(s) {
   return [
     s.status === 'sent' && make('button', { class: 'lead',
-      onclick: function () { okThese(s); } }, 'These look right'),
+      onclick: function () { okThese(s); } }, 'Approve'),
     s.status === 'sent' && make('button', {
-      onclick: function () { askAbout(s); } }, 'Ask about it'),
+      onclick: function () { askAbout(s); } }, 'Query'),
     s.status === 'ok' && make('button', {
       onclick: function () {
         then(api('/api/office/shifts/' + s.id + '/reopen', { method: 'POST' }), 'Put back.');
-      } }, 'Put it back'),
+      } }, 'Reopen'),
     s.status !== 'open' && make('button', {
-      onclick: function () { changeTimes(s); } }, 'Change times'),
+      onclick: function () { changeTimes(s); } }, 'Edit times'),
     s.status !== 'open' && make('button', { class: 'risky',
       onclick: function () {
         if (!confirm("Take " + s.employee_name + "'s hours off for " + shortDate(s.work_date) + '?')) return;
         then(api('/api/office/shifts/' + s.id, { method: 'DELETE' }), 'Taken off.');
-      } }, 'Take it off'),
+      } }, 'Delete'),
   ];
 }
 
@@ -1024,7 +1024,7 @@ function changeTimes(s) {
 function removeJob(job) {
   var warn = job.status === 'assigned'
     ? 'Take "' + job.customer + '" off the board?'
-    : 'Hours may already be against this job. They stay, but lose the customer name. Take it off?';
+    : 'Hours may already be against this job. They stay, but lose the customer name. Delete it?';
   if (!confirm(warn)) return;
   then(api('/api/office/jobs/' + job.id, { method: 'DELETE' }), 'Taken off the board.');
 }
@@ -1034,7 +1034,7 @@ function removeJob(job) {
 function paintHours(sheet) {
   var list = view.data.shifts;
 
-  sheet.appendChild(panel('Hours waiting on you',
+  sheet.appendChild(panel('Awaiting approval',
     list.length ? [make('span', { class: 'pip', text: String(list.length) })] : [],
     list.length
       ? make('ul', { class: 'rows' }, list.map(function (s) {
@@ -1059,7 +1059,7 @@ function paintJobs(sheet) {
 
   var jobs = view.data.jobs || [];
 
-  sheet.appendChild(panel('On the board · ' + shortDate(view.data.from) + ' to ' +
+  sheet.appendChild(panel('Scheduled · ' + shortDate(view.data.from) + ' to ' +
       shortDate(view.data.to), [],
     jobs.length
       ? make('ul', { class: 'jobs' }, jobs.map(function (job) {
@@ -1076,7 +1076,7 @@ function paintJobs(sheet) {
                 onclick: function () { view.editingJob = job.id; paint(); window.scrollTo(0, 0); } },
                 'Change it'),
               make('button', { class: 'slim', style: 'margin:0',
-                onclick: function () { removeJob(job); } }, 'Take it off'))));
+                onclick: function () { removeJob(job); } }, 'Delete'))));
         }))
       : make('div', { class: 'pad' },
           make('p', { class: 'none', text: 'Nothing on the board over these days.' }))));
@@ -1193,7 +1193,7 @@ function jobForm(job) {
           job ? 'Job updated.' : 'On the board for ' + ids.length +
             (ids.length === 1 ? ' person.' : ' people.'));
       },
-    }, job ? 'Save the changes' : 'Put it on the board'));
+    }, job ? 'Save the changes' : 'Schedule it'));
 
   if (job) {
     body.appendChild(make('button', {
@@ -1216,7 +1216,7 @@ function paintNotices(sheet) {
   var urgent = make('input', { type: 'checkbox', id: 'note-urgent',
     style: 'width:auto;min-height:auto;margin:0' });
 
-  sheet.appendChild(panel('Put something out to the crew', [], make('div', { class: 'pad' },
+  sheet.appendChild(panel('New notice', [], make('div', { class: 'pad' },
     make('div', { class: 'field' }, make('label', { for: 'note-title', text: 'Heading' }), title),
     make('div', { class: 'field' }, make('label', { for: 'note-body', text: 'What you want to say' }), body),
     make('label', { for: 'note-urgent',
@@ -1238,7 +1238,7 @@ function paintNotices(sheet) {
 
   var list = view.data.notices || [];
 
-  sheet.appendChild(panel('What you have put out', [],
+  sheet.appendChild(panel('Posted', [],
     list.length
       ? make('div', { class: 'pad' }, list.map(function (n) {
           var seen = n.seen_by || [];
@@ -1300,7 +1300,7 @@ function addPersonForm() {
     make('option', { value: 'crew' }, 'Out on jobs'),
     make('option', { value: 'office' }, 'In the office'));
 
-  return panel('Add somebody', [], make('div', { class: 'pad' },
+  return panel('Add someone', [], make('div', { class: 'pad' },
     make('div', { class: 'two', style: 'margin-bottom:13px' },
       make('div', {}, make('label', { for: 'add-name', text: 'Their name' }), name),
       make('div', {}, make('label', { for: 'add-user', text: 'What they type to sign in' }), username)),
@@ -1325,7 +1325,7 @@ function addPersonForm() {
           },
         }), 'Added. Give them their sign-in name and number.');
       },
-    }, 'Add them')));
+    }, 'Add customer')));
 }
 
 function changeRate(p) {
@@ -1364,18 +1364,18 @@ function paintPay(sheet) {
   var csv = '/api/office/payroll.csv?from=' + view.payFrom + '&to=' + view.payTo +
     (view.payWho ? '&employee_id=' + view.payWho : '');
 
-  sheet.appendChild(panel('Pick the dates', [], make('div', { class: 'pad' },
+  sheet.appendChild(panel('Period', [], make('div', { class: 'pad' },
     make('div', { class: 'two', style: 'margin-bottom:13px' },
       make('div', {}, make('label', { for: 'pay-from', text: 'From' }), from),
       make('div', {}, make('label', { for: 'pay-to', text: 'To' }), to)),
-    make('div', { class: 'field' }, make('label', { for: 'pay-who', text: 'Who?' }), pick),
+    make('div', { class: 'field' }, make('label', { for: 'pay-who', text: 'Person' }), pick),
     make('div', { class: 'inline' },
       make('button', { class: 'go', onclick: function () {
         view.payFrom = from.value || view.payFrom;
         view.payTo = to.value || view.payTo;
         view.payWho = pick.value;
         load();
-      } }, 'Show it'),
+      } }, 'Apply'),
       make('button', { onclick: function () {
         view.payFrom = mondayOf(today());
         view.payTo = shiftDate(view.payFrom, 6);
@@ -1391,7 +1391,7 @@ function paintPay(sheet) {
 
   var rows = view.data.rows || [];
 
-  sheet.appendChild(panel('What each person is owed', [],
+  sheet.appendChild(panel('Summary', [],
     rows.length
       ? make('div', { class: 'scroller' }, make('table', {},
           make('thead', {}, make('tr', {},
@@ -1434,7 +1434,7 @@ function paintPay(sheet) {
 
   var parts = view.data.parts || [];
 
-  sheet.appendChild(panel('Parts used over those dates',
+  sheet.appendChild(panel('Materials',
     parts.length ? [make('span', { class: 'pip', text: String(parts.length) + ' jobs' })] : [],
     parts.length
       ? make('div', { class: 'scroller' }, make('table', {},
@@ -1456,7 +1456,7 @@ function paintPay(sheet) {
 
   var shifts = view.data.shifts || [];
 
-  sheet.appendChild(panel('Every shift over those dates', [],
+  sheet.appendChild(panel('Shifts', [],
     shifts.length
       ? make('ul', { class: 'rows' }, shifts.map(function (s) {
           return hourRow(s, { withName: true, withPay: true, quiet: true, buttons: shiftButtons(s) });

@@ -14,44 +14,53 @@
 :root {
   color-scheme: light dark;
 
-  /* Neutrals carry a slight green bias so the accent reads as native to
-     the palette rather than dropped on top of a stock grey. */
-  --bg:          #f5f7f6;
+  /* Near monochrome, on purpose. Green on a landscaping app is the colour
+     anybody picks in five seconds; spending it on buttons, links, chips and
+     stripes is what makes software look templated. It is kept for the mark
+     and nothing else, and the work itself is set in ink on paper. */
+  --bg:          #f6f6f4;
   --surface:     #ffffff;
-  --surface-2:   #f8faf9;
-  --surface-3:   #eef2f0;
-  --line:        #e2e6e3;
-  --line-2:      #d3d9d5;
-  --line-3:      #b4bdb8;
+  --surface-2:   #fafaf8;
+  --surface-3:   #f0f0ed;
+  --line:        #e6e6e2;
+  --line-2:      #d6d6d1;
+  --line-3:      #b2b2ac;
 
-  --ink:         #121714;
-  --ink-2:       #5a6560;
-  --ink-3:       #8b948f;
-  --ink-on-dark: #f4f7f5;
+  --ink:         #17181a;
+  --ink-2:       #5d6165;
+  --ink-3:       #8e9296;
+  --ink-on-dark: #f7f7f5;
 
-  /* One accent. Everything else is neutral or semantic. */
-  --accent:      #14663f;
-  --accent-2:    #0f5133;
-  --accent-soft: #e6f1eb;
-  --accent-line: #b9d6c8;
+  /* What you press is near black. Nothing else competes with it. */
+  --action:      #1b1d20;
+  --action-2:    #34383d;
+  --on-action:   #ffffff;
+
+  /* The house mark, and only the house mark. */
+  --brand:       #143d2b;
+
+  /* Kept for the rare places a tint still earns its keep. */
+  --accent:      #1b1d20;
+  --accent-2:    #34383d;
+  --accent-soft: #f0f0ed;
+  --accent-line: #d6d6d1;
   --on-accent:   #ffffff;
 
-  /* Semantic state, deliberately off the accent hue so "in progress" never
-     reads as "this is the button". */
-  --live:        #1c6b8a;
-  --live-soft:   #e4eff4;
-  --warn:        #8a5a00;
-  --warn-soft:   #f8f0de;
-  --danger:      #9b2c1c;
-  --danger-soft: #f8e9e6;
-  --done:        #14663f;
-  --done-soft:   #e6f1eb;
+  /* State. Small, quiet, and never decorative. */
+  --live:        #4a5056;
+  --live-soft:   #f0f0ed;
+  --warn:        #8a6410;
+  --warn-soft:   #f7f1e2;
+  --danger:      #9c3328;
+  --danger-soft: #f8eae8;
+  --done:        #1d6b43;
+  --done-soft:   #eaf2ed;
 
-  /* Trade colours. Muted — they label, they do not decorate. */
-  --sprinkler:   #1c5f85;
-  --lighting:    #85601c;
-  --drainage:    #5c5346;
-  --other:       #556059;
+  /* A dot's worth of colour to tell the trades apart. The word stays grey. */
+  --sprinkler:   #2f6f99;
+  --lighting:    #9a7420;
+  --drainage:    #6b6152;
+  --other:       #8e9296;
 
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           "Helvetica Neue", Arial, "Noto Sans", sans-serif;
@@ -82,37 +91,43 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg:          #0e1211;
-    --surface:     #161b19;
-    --surface-2:   #1b211e;
-    --surface-3:   #222925;
-    --line:        #2a322e;
-    --line-2:      #39433d;
-    --line-3:      #566159;
+    --bg:          #0f1011;
+    --surface:     #171819;
+    --surface-2:   #1c1d1f;
+    --surface-3:   #232527;
+    --line:        #2a2c2e;
+    --line-2:      #3a3d40;
+    --line-3:      #585c60;
 
-    --ink:         #eef2f0;
-    --ink-2:       #a8b3ad;
-    --ink-3:       #7d8882;
+    --ink:         #f0f0ee;
+    --ink-2:       #a9adb1;
+    --ink-3:       #7d8286;
 
-    --accent:      #3d9b6c;
-    --accent-2:    #52b07f;
-    --accent-soft: #14251c;
-    --accent-line: #285a41;
-    --on-accent:   #06140c;
+    --action:      #f0f0ee;
+    --action-2:    #d8d8d4;
+    --on-action:   #17181a;
 
-    --live:        #63aecb;
-    --live-soft:   #132630;
+    --brand:       #5fa583;
+
+    --accent:      #f0f0ee;
+    --accent-2:    #d8d8d4;
+    --accent-soft: #232527;
+    --accent-line: #3a3d40;
+    --on-accent:   #17181a;
+
+    --live:        #9aa0a6;
+    --live-soft:   #232527;
     --warn:        #d3a24d;
-    --warn-soft:   #2b2111;
+    --warn-soft:   #2a2213;
     --danger:      #dd7a67;
-    --danger-soft: #2e1512;
-    --done:        #3d9b6c;
-    --done-soft:   #14251c;
+    --danger-soft: #2d1715;
+    --done:        #5fa583;
+    --done-soft:   #16251d;
 
-    --sprinkler:   #78b2d6;
-    --lighting:    #d0aa63;
-    --drainage:    #b3a894;
-    --other:       #9aa7a0;
+    --sprinkler:   #78a8cc;
+    --lighting:    #c9a35c;
+    --drainage:    #ab9f8c;
+    --other:       #8e9296;
 
     --shadow: none;
     --shadow-pop: 0 6px 20px rgba(0, 0, 0, .55);
@@ -120,37 +135,43 @@
 }
 
 :root[data-theme="dark"] {
-  --bg:          #0e1211;
-  --surface:     #161b19;
-  --surface-2:   #1b211e;
-  --surface-3:   #222925;
-  --line:        #2a322e;
-  --line-2:      #39433d;
-  --line-3:      #566159;
+  --bg:          #0f1011;
+  --surface:     #171819;
+  --surface-2:   #1c1d1f;
+  --surface-3:   #232527;
+  --line:        #2a2c2e;
+  --line-2:      #3a3d40;
+  --line-3:      #585c60;
 
-  --ink:         #eef2f0;
-  --ink-2:       #a8b3ad;
-  --ink-3:       #7d8882;
+  --ink:         #f0f0ee;
+  --ink-2:       #a9adb1;
+  --ink-3:       #7d8286;
 
-  --accent:      #3d9b6c;
-  --accent-2:    #52b07f;
-  --accent-soft: #14251c;
-  --accent-line: #285a41;
-  --on-accent:   #06140c;
+  --action:      #f0f0ee;
+  --action-2:    #d8d8d4;
+  --on-action:   #17181a;
 
-  --live:        #63aecb;
-  --live-soft:   #132630;
+  --brand:       #5fa583;
+
+  --accent:      #f0f0ee;
+  --accent-2:    #d8d8d4;
+  --accent-soft: #232527;
+  --accent-line: #3a3d40;
+  --on-accent:   #17181a;
+
+  --live:        #9aa0a6;
+  --live-soft:   #232527;
   --warn:        #d3a24d;
-  --warn-soft:   #2b2111;
+  --warn-soft:   #2a2213;
   --danger:      #dd7a67;
-  --danger-soft: #2e1512;
-  --done:        #3d9b6c;
-  --done-soft:   #14251c;
+  --danger-soft: #2d1715;
+  --done:        #5fa583;
+  --done-soft:   #16251d;
 
-  --sprinkler:   #78b2d6;
-  --lighting:    #d0aa63;
-  --drainage:    #b3a894;
-  --other:       #9aa7a0;
+  --sprinkler:   #78a8cc;
+  --lighting:    #c9a35c;
+  --drainage:    #ab9f8c;
+  --other:       #8e9296;
 
   --shadow: none;
   --shadow-pop: 0 6px 20px rgba(0, 0, 0, .55);
@@ -239,7 +260,7 @@ a { color: var(--accent); }
   padding: var(--s4) var(--s4) var(--s3);
 }
 
-.rail-top svg { flex: none; color: var(--accent); }
+.rail-top svg { flex: none; color: var(--brand); }
 
 .mark b {
   display: block;
@@ -343,8 +364,8 @@ a { color: var(--accent); }
 .tabs button:hover { background: var(--surface-3); color: var(--ink); }
 
 .tabs button[aria-selected="true"] {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--surface-3);
+  color: var(--ink);
   font-weight: 650;
 }
 
@@ -543,9 +564,8 @@ body.crew .sheet {
   align-items: center;
   gap: var(--s3);
   flex-wrap: wrap;
-  padding: 11px var(--s4);
+  padding: var(--s3) var(--s4);
   border-bottom: 1px solid var(--line);
-  background: var(--surface-2);
 }
 
 .card-top h2 {
@@ -566,38 +586,29 @@ body.crew .sheet {
   font-variant-numeric: tabular-nums;
 }
 
-/* Figures only earn a tile when the numbers are the point of the screen. */
+/* A row of boxed tiles is the shape every dashboard template ships with.
+   These are four facts, so they are set as four facts: a line of figures
+   with the label beside each. No boxes, no rules, no grid. */
 .figures {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  background: var(--line);
-  gap: 1px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s6);
+  padding: var(--s4);
 }
 
-.figures div { padding: var(--s4); background: var(--surface); }
+.figures div { display: flex; align-items: baseline; gap: 7px; }
 
 .figures b {
-  display: block;
-  font-size: var(--t-head);
+  font-size: var(--t-lead);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -.02em;
-  line-height: 1.15;
+  letter-spacing: -.015em;
 }
 
-.figures span {
-  display: block;
-  margin-top: 3px;
-  font-size: var(--t-small);
-  color: var(--ink-3);
-  font-weight: 500;
-}
+.figures span { font-size: var(--t-small); color: var(--ink-3); }
 
 @media (max-width: 560px) {
-  .figures { grid-template-columns: 1fr 1fr; }
-  .figures.n3 { grid-template-columns: repeat(3, 1fr); }
-  .figures.n3 div { padding: var(--s3) 10px; }
-  .figures.n3 b { font-size: var(--t-title); }
+  .figures { gap: var(--s2) var(--s5); }
 }
 
 /* ================================ tables =============================== */
@@ -616,7 +627,6 @@ th, td {
 thead th {
   border-top: 0;
   padding-block: 7px;
-  background: var(--surface-2);
   color: var(--ink-3);
   font-size: var(--t-micro);
   font-weight: 650;
@@ -629,7 +639,6 @@ tbody tr:hover { background: var(--surface-2); }
 
 tfoot td {
   border-top: 1px solid var(--line-2);
-  background: var(--surface-2);
   font-weight: 650;
 }
 
@@ -662,12 +671,12 @@ button:disabled {
 }
 
 button.go {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--on-action);
 }
 
-button.go:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); }
+button.go:hover:not(:disabled) { background: var(--action-2); border-color: var(--action-2); }
 
 button.stop {
   background: var(--danger);
@@ -755,16 +764,16 @@ body.office .inline button { flex: 0 0 auto; }
 }
 
 .acts button.lead {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--on-action);
   font-weight: 650;
 }
 
 .acts button.lead:hover:not(:disabled) {
-  background: var(--accent-2);
-  border-color: var(--accent-2);
-  color: var(--on-accent);
+  background: var(--action-2);
+  border-color: var(--action-2);
+  color: var(--on-action);
 }
 
 .picks { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -779,9 +788,9 @@ body.office .inline button { flex: 0 0 auto; }
 }
 
 .picks button[aria-pressed="true"] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--on-action);
 }
 
 /* ================================= forms =============================== */
@@ -866,22 +875,24 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 
 /* ============================== what needs you ========================= */
 
+/* What needs doing, said once. A tinted box with a coloured border is the
+   alert component every admin template ships; a line of type and the button
+   that answers it carries the same weight without the costume. */
 .needsyou {
   display: flex;
   align-items: center;
   gap: var(--s3);
   flex-wrap: wrap;
-  padding: var(--s3) var(--s4);
+  padding: 0 0 var(--s4);
   margin-bottom: var(--s4);
-  background: var(--warn-soft);
-  border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent);
-  border-radius: var(--r-lg);
+  border-bottom: 1px solid var(--line);
 }
 
 .needsyou b {
   margin-right: auto;
-  font-size: var(--t-body);
+  font-size: var(--t-title);
   font-weight: 650;
+  letter-spacing: -.015em;
   color: var(--ink);
 }
 
@@ -889,30 +900,29 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 
 /* ============================== trade + state ========================== */
 
-/* A label, not a decoration: the word does the work, the colour confirms it. */
+/* The word does the work. The dot is the only colour, and it is small. */
 .kind {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: var(--t-micro);
-  font-weight: 650;
-  letter-spacing: .04em;
-  text-transform: uppercase;
+  gap: 6px;
+  font-size: var(--t-small);
+  font-weight: 500;
   color: var(--ink-2);
 }
 
 .kind::before {
   content: "";
+  flex: none;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: currentColor;
+  background: var(--ink-3);
 }
 
-.kind.sprinkler { color: var(--sprinkler); }
-.kind.lighting  { color: var(--lighting); }
-.kind.drainage  { color: var(--drainage); }
-.kind.other     { color: var(--other); }
+.kind.sprinkler::before { background: var(--sprinkler); }
+.kind.lighting::before  { background: var(--lighting); }
+.kind.drainage::before  { background: var(--drainage); }
+.kind.other::before     { background: var(--other); }
 
 .progress {
   display: inline-flex;
@@ -938,11 +948,9 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 .progress.working { color: var(--live); }
 .progress.done    { color: var(--done); }
 
-/* The stripe down the left of a row carries the same state as the dot. */
-.bar { border-radius: 2px; background: var(--line-2); }
-.bar.assigned { background: var(--line-3); }
-.bar.working  { background: var(--live); }
-.bar.done     { background: var(--done); }
+/* No coloured rail down the side of every row. The status already says it
+   in words, and a stripe on each one only makes the page louder. */
+.bar, .tick { display: none; }
 
 .state {
   display: inline-block;
@@ -973,9 +981,6 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 .jobs { list-style: none; margin: 0; padding: 0; }
 
 .jobs > li {
-  display: grid;
-  grid-template-columns: 3px minmax(0, 1fr);
-  gap: 0 var(--s3);
   padding: var(--s4);
   border-top: 1px solid var(--line);
 }
@@ -1013,7 +1018,7 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
   text-underline-offset: 2px;
 }
 
-.metaline a:hover { color: var(--accent); text-decoration-color: currentColor; }
+.metaline a:hover { color: var(--ink); text-decoration-color: var(--ink-3); }
 
 .jobline { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
 .jobmeta { font-size: var(--t-small); color: var(--ink-2); }
@@ -1028,7 +1033,7 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 
 .picklist .jobpick {
   display: grid;
-  grid-template-columns: 3px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0 var(--s3);
   align-items: center;
   width: 100%;
@@ -1178,19 +1183,15 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 
 .rows > li {
   display: grid;
-  grid-template-columns: 3px minmax(0, 1fr) auto;
-  gap: 0 var(--s3);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 var(--s4);
   padding: var(--s4);
   border-top: 1px solid var(--line);
 }
 
 .rows > li:first-child { border-top: 0; }
 
-.tick { border-radius: 2px; background: var(--line-2); }
-.tick.open     { background: var(--live); }
-.tick.sent     { background: var(--line-3); }
-.tick.ok       { background: var(--done); }
-.tick.question { background: var(--danger); }
+
 
 .rows .headline { margin-bottom: 2px; }
 .rows .person { font-size: var(--t-body); font-weight: 650; }
@@ -1212,7 +1213,7 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 
 .rows .num small { display: block; font-size: var(--t-micro); color: var(--ink-3); }
 
-.under { grid-column: 2 / -1; }
+.under { grid-column: 1 / -1; }
 
 /* ================================ the week ============================= */
 
@@ -1308,8 +1309,21 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
   font-weight: 600;
 }
 
-.flash.good { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
-.flash.bad  { background: var(--danger-soft); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 28%, transparent); }
+/* Confirmation should register without becoming a coloured slab: the rule
+   down the side carries it, the words stay in ink. */
+.flash.good {
+  background: var(--surface-2);
+  color: var(--ink);
+  border-color: var(--line);
+  border-left: 2px solid var(--done);
+}
+
+.flash.bad {
+  background: var(--surface-2);
+  color: var(--ink);
+  border-color: var(--line);
+  border-left: 2px solid var(--danger);
+}
 .flash:empty { display: none; }
 
 /* ================================ sign in ============================== */
@@ -1437,3 +1451,14 @@ body.crew .inline button { flex: 1 1 100%; }
 body.crew .daybar + .inline button { flex: 0 1 auto; min-height: 44px; }
 
 body.crew .facts > li { padding: 12px 0; }
+
+/* The crew's version stays a card: on a phone, in the sun, a rule and a
+   sentence is not enough to stop somebody scrolling past it. */
+body.crew .needsyou {
+  padding: var(--s4);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+body.crew .needsyou b { font-size: var(--t-lead); }
