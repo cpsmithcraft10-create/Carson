@@ -1,6 +1,7 @@
 'use strict';
 
 const v = require('../validate');
+const invoicing = require('../invoicing');
 const { HttpError } = require('../http');
 const { today, weekStart, addDays } = require('../time');
 const { loadJobs, loadJob, loadShifts, loadShift, shiftTotals } = require('../queries');
@@ -219,6 +220,11 @@ module.exports = [
                finished_at = datetime('now'), finished_by = ?
          WHERE id = ?
       `).run(wrap, materials, user.id, jobId);
+
+      // The bill follows the work. This never blocks the crew — if it cannot
+      // be sent the job waits in the office's billing queue instead.
+      const billing = invoicing.onJobFinished(db, jobId);
+      if (billing && typeof billing.catch === 'function') billing.catch(() => {});
 
       return { job: loadJob(db, jobId) };
     },

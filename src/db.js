@@ -105,6 +105,32 @@ CREATE TABLE IF NOT EXISTS notice_seen (
   PRIMARY KEY (notice_id, employee_id)
 );
 
+-- Settings the office can change, including the QuickBooks connection.
+-- Key/value keeps the schema still while the settings list grows.
+CREATE TABLE IF NOT EXISTS settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One row per job that has been billed, or tried. The QuickBooks id is what
+-- stops a second run raising a second invoice for the same day's work.
+CREATE TABLE IF NOT EXISTS invoices (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id      INTEGER NOT NULL UNIQUE REFERENCES jobs(id) ON DELETE CASCADE,
+  status      TEXT    NOT NULL DEFAULT 'waiting'
+                      CHECK (status IN ('waiting', 'sending', 'holding', 'sent', 'failed', 'skipped')),
+  qbo_id      TEXT,
+  doc_number  TEXT,
+  total       REAL,
+  why         TEXT,
+  tried_at    TEXT,
+  sent_at     TEXT,
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+
 CREATE TABLE IF NOT EXISTS sessions (
   token       TEXT PRIMARY KEY,
   employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
@@ -122,6 +148,13 @@ CREATE INDEX IF NOT EXISTS idx_sessions_employee ON sessions(employee_id);
  */
 const LATER_COLUMNS = [
   ['jobs', 'customer_id', 'INTEGER REFERENCES customers(id) ON DELETE SET NULL'],
+  // What to charge for this job. A quoted price wins over hours x rate; the
+  // parts charge is what goes on the bill, not what the parts cost.
+  ['jobs', 'quoted_price', 'REAL'],
+  ['jobs', 'parts_price', 'REAL'],
+  ['jobs', 'no_charge', 'INTEGER NOT NULL DEFAULT 0'],
+  // Which customer this is in QuickBooks, once it has been matched up.
+  ['customers', 'qbo_id', 'TEXT'],
 ];
 
 function addMissingColumns(db) {

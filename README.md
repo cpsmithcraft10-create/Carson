@@ -84,6 +84,8 @@ They can also:
   sits at the top in colour, and see who has actually read it.
 - **The crew** — add people, change rates, set a new sign-in number, take
   somebody off (their hours are kept, they just cannot sign in).
+- **Billing** — every finished job, what it comes to, and whether it is in
+  QuickBooks yet. See below.
 - **Payroll** — totals per person over any dates, with pay from their rate,
   **anything over 40 hours flagged**, a day-by-day breakdown, a roll-up of
   every part used over the period for billing, and a CSV for whoever does the
@@ -116,6 +118,47 @@ the file you exported or paste the rows straight out of the spreadsheet.
 
 Straight after, those customers are in the drop-down on **Give out work** —
 pick one and the address and phone fill themselves in.
+
+## Billing into QuickBooks
+
+When the crew mark a job finished it goes to **Billing**, and from there into
+QuickBooks Online as an invoice against that customer.
+
+- **It goes by itself.** *Send a job to QuickBooks as soon as the crew finish
+  it* is on by default. Turn it off and everything queues for you instead.
+- **A job gets one invoice, ever.** The send is claimed in the database before
+  anything leaves the building, so a double click, a retry and the automatic
+  send all racing at once still produce exactly one invoice. A customer being
+  billed twice for the same day is the thing this feature is built around
+  never doing.
+- **It never guesses.** No customer on the job, no hourly rate set, parts used
+  with no price on them, hours nobody has OK'd yet — each one holds the job in
+  *Needs a look* and says which it was. Hours that are still waiting for you to
+  approve are never billed.
+- **Prices.** Labour is the OK'd hours times the rate you set. A job with a
+  quoted price is billed at the quote whatever the hours came to. Parts are
+  billed at what you charge, which is not what they cost — the crew write down
+  what they used, you put the price on. Any job can be marked *no charge*.
+- **Customers are matched by name**, and remembered after the first time. If
+  QuickBooks has never heard of them, they get added.
+
+### Setting it up
+
+1. Make an app at `developer.intuit.com` and copy the **Client ID** and
+   **Client secret**.
+2. Add `https://your-address/office.html` there as a **Redirect URI**.
+3. In **Billing → QuickBooks keys**, paste both in, then **Connect to
+   QuickBooks** and say yes. The company ID fills itself in.
+4. Set the **hourly rate you charge**, and make sure the two product names —
+   *Labour* and *Materials* by default — match real products or services in
+   your QuickBooks. An invoice line has to point at one, and it will say so if
+   they are missing.
+5. **Leave it on the test company until you have watched a few go through.**
+   That is what the *Which QuickBooks company* setting is for. Invoices on the
+   real file are seen by customers.
+
+The keys and tokens live in the `settings` table on your own server and are
+never sent back out to the browser.
 
 ## Things worth knowing
 
@@ -215,7 +258,7 @@ Back up `data/custom-outdoor.db` — that one file is every hour anybody worked.
 npm test
 ```
 
-61 tests covering the hours arithmetic (breaks, work past midnight, rounding),
+89 tests covering the hours arithmetic (breaks, work past midnight, rounding),
 a whole day from giving out a job through to payroll, two people on one job,
 work that was never on a list, announcements and who read them, a job running
 over two days, customers and their history, putting a job out again week after
@@ -224,7 +267,13 @@ list out of a messy export (quoted commas, tabs, a split address, no heading
 row, a byte-order mark) and bringing it in twice without doubling anybody up
 or writing over a note somebody left, and the boundaries: the crew cannot
 reach the office side, cannot log against somebody else's job, cannot bring a
-customer list in, and cannot change hours already OK'd.
+customer list in, cannot reach billing or the QuickBooks keys, and cannot
+change hours already OK'd.
+
+The billing half of that runs the whole send-an-invoice path against a
+QuickBooks that lives in a variable: the invoice body Intuit is handed, the
+token refresh, a customer being created, a missing product, a refusal, and two
+sends racing each other over the same job.
 
 ## Layout
 
@@ -236,6 +285,10 @@ src/time.js          date and time arithmetic
 src/validate.js      checking what comes in
 src/queries.js       shared job and shift queries
 src/import.js        reading a customer list out of a CSV or a paste
+src/settings.js      office settings, including the QuickBooks connection
+src/billing.js       working out what a finished job should bill
+src/quickbooks.js    every URL and body shape QuickBooks Online expects
+src/invoicing.js     a finished job, all the way to an invoice
 src/routes/          sign-in, crew and office endpoints
 public/index.html    sign in
 public/crew.html     the crew screen

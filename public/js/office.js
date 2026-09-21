@@ -3,7 +3,7 @@
 /* The office screen. Hand out work, keep an eye on the day, OK hours, post
    announcements, run payroll. */
 
-var TABS = ['today', 'week', 'hours', 'jobs', 'customers', 'notices', 'crew', 'pay'];
+var TABS = ['today', 'week', 'hours', 'jobs', 'customers', 'billing', 'notices', 'crew', 'pay'];
 
 var view = {
   me: null,
@@ -13,6 +13,10 @@ var view = {
   payFrom: mondayOf(today()),
   payTo: shiftDate(mondayOf(today()), 6),
   payWho: '',
+  billFrom: shiftDate(today(), -30),
+  billTo: today(),
+  billOpen: null,     // the job whose prices are being edited
+  billKeys: false,    // the QuickBooks settings panel is open
   people: [],
   customers: [],
   openCustomer: null,
@@ -42,6 +46,9 @@ function fetchTab() {
     return view.openCustomer
       ? api('/api/office/customers/' + view.openCustomer)
       : api('/api/office/customers');
+  }
+  if (view.tab === 'billing') {
+    return api('/api/office/billing?from=' + view.billFrom + '&to=' + view.billTo);
   }
   if (view.tab === 'notices') return api('/api/office/notices');
   if (view.tab === 'crew') return api('/api/office/people?include_past=1');
@@ -73,9 +80,15 @@ function load() {
 function paintCounts(counts) {
   if (!counts) return;
 
-  var pip = document.getElementById('pip-hours');
-  pip.className = counts.waiting ? 'pipdot' : '';
-  pip.textContent = counts.waiting ? String(counts.waiting) : '';
+  var badge = function (id, n) {
+    var pip = document.getElementById(id);
+    if (!pip) return;
+    pip.className = n ? 'pipdot' : '';
+    pip.textContent = n ? String(n) : '';
+  };
+
+  badge('pip-hours', counts.waiting);
+  badge('pip-billing', counts.to_bill);
 }
 
 /* The job form and the payroll picker need the crew even on screens that do
@@ -169,6 +182,7 @@ function paint() {
     hours: paintHours,
     jobs: paintJobs,
     customers: paintCustomers,
+    billing: paintBilling,
     notices: paintNotices,
     crew: paintCrew,
     pay: paintPay,
@@ -482,6 +496,268 @@ function lookedAt(out, send) {
       + ((out.add + out.update) === 1 ? ' customer' : ' customers')));
 
   return lines;
+}
+
+/* ------------------------------- billing -------------------------------- */
+
+/**
+ * What to call a row. The ledger status alone is not enough: a job can be
+ * sitting at "waiting" and still be missing the price, and a row that says
+ * "Ready to send" next to "no hours have been OK'd" helps nobody.
+ */
+function billWords(r) {
+  if (r.status === 'sent') return 'In QuickBooks';
+  if (r.status === 'sending') return 'Sending';
+  if (r.no_charge || r.status === 'skipped') return 'No charge';
+  if (r.status === 'failed') return 'Did not send';
+  return r.ready ? 'Ready to send' : 'Needs a look';
+}
+
+function paintBilling(sheet) {
+  var d = view.data;
+  var s = d.settings;
+
+  if (!s.qbo_connected) sheet.appendChild(connectCard(s));
+
+  sheet.appendChild(make('div', { class: 'card' }, figures([
+    { value: String(d.totals.ready), label: 'Ready to send' },
+    { value: String(d.totals.held), label: 'Need a look' },
+    { value: String(d.totals.sent), label: 'In QuickBooks' },
+    { value: CASH.format(d.totals.billed), label: 'Billed' },
+  ])));
+
+  var ready = d.rows.filter(function (r) { return r.ready && r.status !== 'sent'; });
+
+  sheet.appendChild(panel('Finished work',
+    [
+      make('span', { class: 'dim', style: 'font-size:12.5px',
+        text: shortDate(d.from) + ' to ' + shortDate(d.to) }),
+      ready.length > 0 && s.qbo_connected && make('button', {
+        class: 'go slim', style: 'margin:0',
+        onclick: function () {
+          then(api('/api/office/billing/send-ready', { method: 'POST', body: {} }),
+            'Sent what was ready.');
+        },
+      }, 'Send all ' + ready.length + ' ready'),
+    ].filter(Boolean),
+    d.rows.length
+      ? make('ul', { class: 'jobs tight' }, d.rows.map(billRow))
+      : make('div', { class: 'pad' },
+          make('p', { class: 'none', text: 'No finished work over these dates.' }))));
+
+  sheet.appendChild(billingSettings(s));
+}
+
+function billRow(r) {
+  var open = view.billOpen === r.job_id;
+
+  var meta = make('p', { class: 'metaline' }, kindChip(r.kind));
+  var add = function (bit) {
+    if (!bit) return;
+    if (meta.childNodes.length) meta.appendChild(make('span', { class: 'gap', text: '·' }));
+    meta.appendChild(bit);
+  };
+
+  add(make('span', { text: shortDate(r.job_date) }));
+  if (r.hours > 0) add(make('span', { text: r.hours.toFixed(2) + ' h OK’d' }));
+  if (r.doc_number) add(make('span', { text: 'Invoice ' + r.doc_number }));
+
+  var ready = r.ready && r.status !== 'sent';
+  var state = r.status === 'sent' ? 'done'
+    : (r.status === 'failed' || (!r.ready && !r.no_charge) ? 'assigned' : 'working');
+
+  var body = make('div', {},
+    make('div', { class: 'headline' },
+      make('h3', { text: r.customer }),
+      make('span', { class: 'progress ' + (ready ? 'working' : state), text: billWords(r) }),
+      make('span', { class: 'num', style: 'margin-left:auto;font-weight:650',
+        text: r.no_charge ? '—' : CASH.format(r.total) })),
+    meta,
+    r.why && make('p', { class: 'asked', text: r.why }),
+    !r.why && r.reasons.length > 0 && r.status !== 'sent' &&
+      make('p', { class: 'asked', text: r.reasons.join('. ') }));
+
+  var acts = make('div', { class: 'acts' });
+
+  if (r.status !== 'sent') {
+    acts.appendChild(make('button', {
+      onclick: function () { view.billOpen = open ? null : r.job_id; paint(); },
+    }, open ? 'Close' : 'Set the price'));
+  }
+
+  if (r.ready && r.status !== 'sent') {
+    acts.appendChild(make('button', {
+      class: 'lead',
+      onclick: function () {
+        then(api('/api/office/billing/' + r.job_id + '/send', { method: 'POST', body: {} }),
+          'Sent to QuickBooks.');
+      },
+    }, r.status === 'failed' ? 'Try again' : 'Send to QuickBooks'));
+  }
+
+  if (r.status === 'sent') {
+    acts.appendChild(make('span', { class: 'dim', style: 'font-size:12.5px',
+      text: 'Sent ' + (r.sent_at ? agoWords(r.sent_at) : '') }));
+  }
+
+  body.appendChild(acts);
+  if (open) body.appendChild(priceForm(r));
+
+  return make('li', {}, make('div', { class: 'bar ' + state }), body);
+}
+
+/** What to charge for this one job. */
+function priceForm(r) {
+  var quoted = make('input', {
+    type: 'number', id: 'bill-quote-' + r.job_id, min: '0', step: '0.01',
+    placeholder: 'Leave empty to bill the hours',
+    value: r.quoted_price == null ? '' : String(r.quoted_price),
+  });
+
+  var parts = make('input', {
+    type: 'number', id: 'bill-parts-' + r.job_id, min: '0', step: '0.01',
+    placeholder: '0.00',
+    value: r.parts_price == null ? '' : String(r.parts_price),
+  });
+
+  var free = make('input', {
+    type: 'checkbox', id: 'bill-free-' + r.job_id, checked: r.no_charge,
+    style: 'width:auto;min-height:auto;margin:0',
+  });
+
+  return make('div', { style: 'margin-top:14px;padding-top:14px;border-top:1px solid var(--line)' },
+    make('div', { class: 'two', style: 'margin-bottom:12px' },
+      make('div', {},
+        make('label', { for: 'bill-quote-' + r.job_id, text: 'Price for the job' }), quoted),
+      make('div', {},
+        make('label', { for: 'bill-parts-' + r.job_id, text: 'Charge for parts' }), parts)),
+    r.materials && make('p', { class: 'none', style: 'margin-bottom:12px',
+      text: 'Parts the crew put down: ' + r.materials }),
+    make('label', {
+      for: 'bill-free-' + r.job_id,
+      style: 'display:flex;align-items:center;gap:8px;font-weight:600',
+    }, free, 'Do not charge for this one'),
+    make('div', { class: 'inline' },
+      make('button', { class: 'go', onclick: function () {
+        view.billOpen = null;
+        then(api('/api/office/billing/' + r.job_id, {
+          method: 'PATCH',
+          body: {
+            quoted_price: quoted.value === '' ? null : Number(quoted.value),
+            parts_price: parts.value === '' ? null : Number(parts.value),
+            no_charge: free.checked,
+          },
+        }), 'Price saved.');
+      } }, 'Save the price'),
+      make('button', { onclick: function () { view.billOpen = null; paint(); } }, 'Never mind')));
+}
+
+/** Getting QuickBooks hooked up in the first place. */
+function connectCard(s) {
+  var box = make('div', { class: 'needsyou' },
+    make('b', { text: s.qbo_has_keys
+      ? 'QuickBooks is not connected yet'
+      : 'QuickBooks is not set up yet' }),
+    make('button', {
+      class: 'go',
+      onclick: function () {
+        if (!s.qbo_has_keys) { view.billKeys = true; paint(); return; }
+        var back = location.origin + '/office.html';
+        api('/api/office/quickbooks/link?redirect_uri=' + encodeURIComponent(back))
+          .then(function (r) { location.href = r.url; })
+          .catch(function (err) { say(err.message, 'bad'); });
+      },
+    }, s.qbo_has_keys ? 'Connect to QuickBooks' : 'Put the keys in'));
+
+  return box;
+}
+
+function billingSettings(s) {
+  var rate = make('input', { type: 'number', id: 'bill-rate', min: '0', step: '0.01',
+    value: String(s.bill_rate || '') });
+  var labour = make('input', { id: 'bill-labour', maxlength: '100', value: s.labour_item });
+  var partsItem = make('input', { id: 'bill-parts-item', maxlength: '100', value: s.parts_item });
+
+  var auto = make('input', { type: 'checkbox', id: 'bill-auto', checked: s.auto_send,
+    style: 'width:auto;min-height:auto;margin:0' });
+
+  var env = make('select', { id: 'bill-env' },
+    make('option', { value: 'sandbox' }, 'Test company (sandbox)'),
+    make('option', { value: 'production' }, 'The real company file'));
+  env.value = s.qbo_env;
+
+  var body = make('div', { class: 'pad' },
+    make('div', { class: 'two', style: 'margin-bottom:12px' },
+      make('div', {},
+        make('label', { for: 'bill-rate', text: 'Hourly rate you charge' }), rate),
+      make('div', {},
+        make('label', { for: 'bill-env', text: 'Which QuickBooks company' }), env)),
+    make('div', { class: 'two', style: 'margin-bottom:12px' },
+      make('div', {},
+        make('label', { for: 'bill-labour', text: 'Labour is called this in QuickBooks' }), labour),
+      make('div', {},
+        make('label', { for: 'bill-parts-item', text: 'Parts are called this' }), partsItem)),
+    make('label', {
+      for: 'bill-auto',
+      style: 'display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:12px',
+    }, auto, 'Send a job to QuickBooks as soon as the crew finish it'),
+    make('div', { class: 'inline' },
+      make('button', { class: 'go', onclick: function () {
+        then(api('/api/office/billing/settings', {
+          method: 'PUT',
+          body: {
+            bill_rate: Number(rate.value) || 0,
+            labour_item: labour.value.trim(),
+            parts_item: partsItem.value.trim(),
+            auto_send: auto.checked,
+            qbo_env: env.value,
+          },
+        }), 'Billing settings saved.');
+      } }, 'Save settings'),
+      make('button', {
+        onclick: function () { view.billKeys = !view.billKeys; paint(); },
+      }, view.billKeys ? 'Hide the keys' : 'QuickBooks keys'),
+      s.qbo_connected && make('button', { class: 'risky', onclick: function () {
+        if (!confirm('Disconnect QuickBooks? Nothing already sent is touched.')) return;
+        then(api('/api/office/quickbooks/disconnect', { method: 'POST' }), 'Disconnected.');
+      } }, 'Disconnect')));
+
+  if (view.billKeys) body.appendChild(keysForm(s));
+
+  return panel('How billing works here',
+    [s.qbo_connected
+      ? make('span', { class: 'state ok', text: 'Connected · ' + s.qbo_env })
+      : make('span', { class: 'state question', text: 'Not connected' })],
+    body);
+}
+
+function keysForm(s) {
+  var id = make('input', { id: 'qbo-id', maxlength: '200', autocomplete: 'off',
+    placeholder: s.qbo_has_keys ? 'On file — type to replace' : 'From your Intuit app' });
+  var secret = make('input', { id: 'qbo-secret', type: 'password', maxlength: '200',
+    autocomplete: 'off',
+    placeholder: s.qbo_has_keys ? 'On file — type to replace' : 'From your Intuit app' });
+  var realm = make('input', { id: 'qbo-realm', maxlength: '100',
+    value: s.qbo_realm_id || '', placeholder: 'Filled in when you connect' });
+
+  return make('div', { style: 'margin-top:16px;padding-top:16px;border-top:1px solid var(--line)' },
+    make('p', { class: 'none', style: 'margin-bottom:12px' },
+      'These come from the app you make at developer.intuit.com. Add '
+      + location.origin + '/office.html as a redirect URI there. They are kept on '
+      + 'the server and never sent back out to this screen.'),
+    make('div', { class: 'field' }, make('label', { for: 'qbo-id', text: 'Client ID' }), id),
+    make('div', { class: 'field' },
+      make('label', { for: 'qbo-secret', text: 'Client secret' }), secret),
+    make('div', { class: 'field' },
+      make('label', { for: 'qbo-realm', text: 'Company ID (realm)' }), realm),
+    make('button', { class: 'go', onclick: function () {
+      var body = {};
+      if (id.value.trim()) body.qbo_client_id = id.value.trim();
+      if (secret.value.trim()) body.qbo_client_secret = secret.value.trim();
+      if (realm.value.trim()) body.qbo_realm_id = realm.value.trim();
+      if (!Object.keys(body).length) { say('Nothing to save.', 'bad'); return; }
+      then(api('/api/office/billing/settings', { method: 'PUT', body: body }), 'Keys saved.');
+    } }, 'Save the keys'));
 }
 
 function paintOneCustomer(sheet) {
@@ -1220,6 +1496,39 @@ hunt.addEventListener('input', function () {
 
 document.getElementById('signout').appendChild(signOutButton());
 
+/**
+ * QuickBooks sends the office back here with a code on the URL. Swap it for
+ * tokens, then clean the address bar so a refresh cannot replay it.
+ */
+function finishQuickBooksIfReturning() {
+  var q = new URLSearchParams(location.search);
+  var code = q.get('code');
+  var realm = q.get('realmId');
+  if (!code || !realm) return Promise.resolve(false);
+
+  var clean = location.origin + location.pathname;
+
+  return api('/api/office/quickbooks/finish', {
+    method: 'POST',
+    body: {
+      code: code,
+      realm_id: realm,
+      state: q.get('state') || '',
+      redirect_uri: clean,
+    },
+  }).then(function () {
+    history.replaceState({}, '', clean);
+    view.tab = 'billing';
+    view.flash = { kind: 'good', message: 'QuickBooks is connected.' };
+    return true;
+  }).catch(function (err) {
+    history.replaceState({}, '', clean);
+    view.tab = 'billing';
+    view.flash = { kind: 'bad', message: err.message };
+    return true;
+  });
+}
+
 api('/api/me').then(function (r) {
   if (r.user.role !== 'office') { location.replace('/crew.html'); return; }
   view.me = r.user;
@@ -1228,7 +1537,11 @@ api('/api/me').then(function (r) {
     make('span', { style: 'min-width:0' },
       make('b', { text: r.user.name }),
       make('i', { text: 'Office' })));
-  return load();
+
+  return finishQuickBooksIfReturning().then(function () {
+    markTab();
+    return load();
+  });
 }).catch(function (err) {
   document.getElementById('sheet').textContent = err.message;
 });

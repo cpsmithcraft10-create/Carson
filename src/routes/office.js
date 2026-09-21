@@ -9,6 +9,9 @@ const {
   officeCounts, loadCustomers, loadCustomer,
 } = require('../queries');
 const { readCustomers, sameName, MOST_ROWS } = require('../import');
+const settingsStore = require('../settings');
+const invoicing = require('../invoicing');
+const { consentUrl } = require('../quickbooks');
 
 const KINDS = ['sprinkler', 'lighting', 'drainage', 'other'];
 
@@ -374,6 +377,245 @@ module.exports = [
       }
 
       return { looked: false, ...summary, customers: loadCustomers(db, null) };
+    },
+  },
+
+  // ---- billing, and QuickBooks -------------------------------------------
+
+  {
+    method: 'GET',
+    path: '/api/office/billing',
+    handler({ db, query }) {
+      const from = query.from ? v.date(query.from, 'From') : addDays(today(), -30);
+      const to = query.to ? v.date(query.to, 'To') : today();
+
+      // Every finished job in the window, with whatever the ledger knows.
+      const jobs = db.prepare(`
+        SELECT j.id FROM jobs j
+         WHERE j.status = 'done' AND j.job_date BETWEEN ? AND ?
+         ORDER BY j.job_date DESC, j.id DESC
+      `).all(from, to);
+
+      const rows = jobs.map((r) => {
+        const seen = invoicing.preview(db, r.id);
+        return {
+          job_id: r.id,
+          job_date: seen.job.job_date,
+          customer: seen.job.customer,
+          customer_id: seen.job.customer_id,
+          kind: seen.job.kind,
+          address: seen.job.address,
+          materials: seen.job.materials,
+          quoted_price: seen.job.quoted_price,
+          parts_price: seen.job.parts_price,
+          no_charge: Boolean(seen.job.no_charge),
+          hours: seen.hours,
+          rate: seen.rate,
+          total: seen.total,
+          lines: seen.lines,
+          reasons: seen.reasons,
+          ready: seen.ok,
+          status: seen.invoice ? seen.invoice.status : 'waiting',
+          qbo_id: seen.invoice ? seen.invoice.qbo_id : null,
+          doc_number: seen.invoice ? seen.invoice.doc_number : null,
+          why: seen.invoice ? seen.invoice.why : null,
+          sent_at: seen.invoice ? seen.invoice.sent_at : null,
+        };
+      });
+
+      const billed = rows.filter((r) => r.status === 'sent');
+
+      return {
+        from,
+        to,
+        rows,
+        settings: settingsStore.forOffice(db),
+        totals: {
+          ready: rows.filter((r) => r.ready && r.status !== 'sent').length,
+          held: rows.filter((r) => r.status === 'holding' || r.status === 'failed').length,
+          sent: billed.length,
+          billed: round2(billed.reduce((t, r) => t + (r.total || 0), 0)),
+          waiting: round2(rows.filter((r) => r.status !== 'sent' && !r.no_charge)
+            .reduce((t, r) => t + (r.total || 0), 0)),
+        },
+      };
+    },
+  },
+
+  // What to charge for one job. The office sets this, not the crew.
+  {
+    method: 'PATCH',
+    path: '/api/office/billing/:id',
+    handler({ db, params, body }) {
+      const jobId = v.id(params.id, 'Job');
+      const job = db.prepare('SELECT id FROM jobs WHERE id = ?').get(jobId);
+      if (!job) throw new HttpError(404, 'That job was not found');
+
+      if (body.quoted_price !== undefined) {
+        const price = body.quoted_price === null || body.quoted_price === ''
+          ? null : v.decimal(body.quoted_price, 'Quoted price', { max: 1000000 });
+        db.prepare('UPDATE jobs SET quoted_price = ? WHERE id = ?').run(price, jobId);
+      }
+
+      if (body.parts_price !== undefined) {
+        const price = body.parts_price === null || body.parts_price === ''
+          ? null : v.decimal(body.parts_price, 'Parts price', { max: 1000000 });
+        db.prepare('UPDATE jobs SET parts_price = ? WHERE id = ?').run(price, jobId);
+      }
+
+      if (body.no_charge !== undefined) {
+        db.prepare('UPDATE jobs SET no_charge = ? WHERE id = ?').run(body.no_charge ? 1 : 0, jobId);
+      }
+
+      return { job: invoicing.preview(db, jobId) };
+    },
+  },
+
+  {
+    method: 'POST',
+    path: '/api/office/billing/:id/send',
+    async handler({ db, params, body }) {
+      const jobId = v.id(params.id, 'Job');
+      const out = await invoicing.send(db, jobId, { force: Boolean(body && body.force) });
+      if (!out.invoice && !out.ok) throw new HttpError(400, out.why || 'That did not send');
+      return out;
+    },
+  },
+
+  // Send everything that is ready, in one go.
+  {
+    method: 'POST',
+    path: '/api/office/billing/send-ready',
+    async handler({ db }) {
+      const waiting = db.prepare(`
+        SELECT j.id FROM jobs j
+        LEFT JOIN invoices i ON i.job_id = j.id
+         WHERE j.status = 'done' AND (i.qbo_id IS NULL)
+         ORDER BY j.job_date ASC, j.id ASC
+         LIMIT 100
+      `).all();
+
+      let sent = 0;
+      const stuck = [];
+
+      for (const row of waiting) {
+        const seen = invoicing.preview(db, row.id);
+        if (!seen || !seen.ok) continue;
+
+        // eslint-disable-next-line no-await-in-loop
+        const out = await invoicing.send(db, row.id);
+        if (out.ok) sent += 1;
+        else stuck.push({ job_id: row.id, why: out.invoice ? out.invoice.why : 'Did not send' });
+      }
+
+      return { sent, stuck };
+    },
+  },
+
+  {
+    method: 'PUT',
+    path: '/api/office/billing/settings',
+    handler({ db, body }) {
+      const patch = {};
+
+      if (body.bill_rate !== undefined) {
+        patch.bill_rate = String(v.decimal(body.bill_rate, 'Hourly rate to charge', { max: 10000 }) || 0);
+      }
+      if (body.labour_item !== undefined) {
+        patch.labour_item = v.text(body.labour_item, 'Labour item', { required: true, max: 100 });
+      }
+      if (body.parts_item !== undefined) {
+        patch.parts_item = v.text(body.parts_item, 'Parts item', { required: true, max: 100 });
+      }
+      if (body.auto_send !== undefined) patch.auto_send = body.auto_send ? '1' : '0';
+      if (body.qbo_env !== undefined) {
+        patch.qbo_env = v.oneOf(body.qbo_env, 'Which company file', ['sandbox', 'production']);
+      }
+      if (body.qbo_client_id !== undefined) {
+        patch.qbo_client_id = v.text(body.qbo_client_id, 'Client ID', { max: 200 }) || '';
+      }
+      if (body.qbo_client_secret !== undefined) {
+        patch.qbo_client_secret = v.text(body.qbo_client_secret, 'Client secret', { max: 200 }) || '';
+      }
+      if (body.qbo_realm_id !== undefined) {
+        patch.qbo_realm_id = v.text(body.qbo_realm_id, 'Company ID', { max: 100 }) || '';
+      }
+
+      settingsStore.putMany(db, patch);
+      return { settings: settingsStore.forOffice(db) };
+    },
+  },
+
+  // Step one of connecting: where to send the office to say yes.
+  {
+    method: 'GET',
+    path: '/api/office/quickbooks/link',
+    handler({ db, query }) {
+      const s = settingsStore.all(db);
+      if (!s.qbo_client_id) throw new HttpError(400, 'Put your QuickBooks keys in first');
+
+      const redirectUri = v.text(query.redirect_uri, 'Return address', { required: true, max: 500 });
+      const state = require('node:crypto').randomBytes(16).toString('hex');
+      settingsStore.put(db, 'qbo_state', state);
+
+      return { url: consentUrl({ clientId: s.qbo_client_id, redirectUri, state }) };
+    },
+  },
+
+  // Step two: QuickBooks sends them back with a code.
+  {
+    method: 'POST',
+    path: '/api/office/quickbooks/finish',
+    async handler({ db, body }) {
+      const code = v.text(body.code, 'Code from QuickBooks', { required: true, max: 500 });
+      const realm = v.text(body.realm_id, 'Company ID', { required: true, max: 100 });
+      const redirectUri = v.text(body.redirect_uri, 'Return address', { required: true, max: 500 });
+      const state = v.text(body.state, 'State', { max: 200 });
+
+      const expected = settingsStore.get(db, 'qbo_state');
+      if (!expected || state !== expected) {
+        throw new HttpError(400, 'That sign-in did not come back the way it went out. Try again.');
+      }
+      settingsStore.put(db, 'qbo_state', '');
+      settingsStore.put(db, 'qbo_realm_id', realm);
+
+      const live = settingsStore.all(db);
+      const qbo = require('../quickbooks').makeClient({
+        settings: live,
+        saveTokens(tokens) {
+          settingsStore.putMany(db, {
+            qbo_access_token: tokens.access_token,
+            qbo_refresh_token: tokens.refresh_token,
+            qbo_access_expires: String(tokens.expires_at),
+            qbo_connected_at: new Date().toISOString(),
+          });
+        },
+      });
+
+      await qbo.exchangeCode({ code, redirectUri });
+      return { settings: settingsStore.forOffice(db) };
+    },
+  },
+
+  {
+    method: 'POST',
+    path: '/api/office/quickbooks/disconnect',
+    async handler({ db }) {
+      try {
+        const live = settingsStore.all(db);
+        if (live.qbo_refresh_token) {
+          await require('../quickbooks').makeClient({ settings: live }).revoke();
+        }
+      } catch {
+        // Losing our copy matters more than tidying up their end.
+      }
+
+      settingsStore.putMany(db, {
+        qbo_access_token: '', qbo_refresh_token: '', qbo_access_expires: '',
+        qbo_connected_at: '', qbo_realm_id: '',
+      });
+
+      return { settings: settingsStore.forOffice(db) };
     },
   },
 

@@ -99,6 +99,15 @@ function officeCounts(db) {
   return {
     waiting: db.prepare("SELECT COUNT(*) AS n FROM shifts WHERE status = 'sent'").get().n,
     on_the_clock: db.prepare("SELECT COUNT(*) AS n FROM shifts WHERE status = 'open'").get().n,
+    // Finished work that is not in QuickBooks yet, so the tab can say so.
+    to_bill: db.prepare(`
+      SELECT COUNT(*) AS n
+        FROM jobs j
+        LEFT JOIN invoices i ON i.job_id = j.id
+       WHERE j.status = 'done'
+         AND (i.qbo_id IS NULL)
+         AND (i.status IS NULL OR i.status <> 'skipped')
+    `).get().n,
   };
 }
 
