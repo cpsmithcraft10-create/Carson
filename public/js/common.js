@@ -279,13 +279,21 @@ function hourRow(shift, opts) {
     (shift.end_time ? clockTime(shift.end_time) : 'now') +
     (shift.break_minutes ? '  ·  ' + shift.break_minutes + ' min break' : '');
 
+  // Where the screen is already about one day, repeating the date on every
+  // row is just something else to read past.
+  var when = (opts.sameDay ? '' : shortDate(shift.work_date) + '  ·  ') + span;
+
   var middle = make('div', {},
-    opts.withName && make('div', { class: 'person', text: shift.employee_name }),
+    opts.withName && make('div', { class: 'headline' },
+      make('div', { class: 'person', text: shift.employee_name }),
+      make('span', { class: 'state ' + shift.status,
+        text: STATE_WORDS[shift.status] || shift.status })),
     make('div', { class: 'what' + (opts.withName ? ' sub' : ''), text: shift.what }),
     shift.job_address && make('div', { class: 'clock', text: shift.job_address }),
-    make('div', { class: 'clock', text: shortDate(shift.work_date) + '  ·  ' + span }),
+    make('div', { class: 'clock', text: when }),
     shift.notes && make('div', { class: 'said', text: '“' + shift.notes + '”' }),
-    make('span', { class: 'state ' + shift.status, text: STATE_WORDS[shift.status] || shift.status }),
+    !opts.withName && make('span', { class: 'state ' + shift.status,
+      text: STATE_WORDS[shift.status] || shift.status }),
     shift.status === 'question' && shift.question &&
       make('div', { class: 'asked', text: 'Office asks: ' + shift.question }));
 
@@ -297,8 +305,12 @@ function hourRow(shift, opts) {
 
   var row = make('li', {}, make('div', { class: 'tick ' + shift.status }), middle, right);
 
+  // The crew get buttons they can hit with a glove on; the office, whose
+  // screen is mostly for reading, gets them quiet and out of the way.
   var acts = (opts.buttons || []).filter(Boolean);
-  if (acts.length) middle.appendChild(make('div', { class: 'inline under' }, acts));
+  if (acts.length) {
+    middle.appendChild(make('div', { class: (opts.quiet ? 'acts' : 'inline') + ' under' }, acts));
+  }
 
   return row;
 }

@@ -135,10 +135,12 @@ function paint() {
 
   if (view.tab === 'today' || view.tab === 'jobs') {
     sheet.appendChild(make('div', { class: 'daybar' },
-      make('button', { class: 'slim', 'aria-label': 'Day before',
-        onclick: function () { view.day = shiftDate(view.day, -1); load(); } }, '‹'),
       make('h1', {}, longDate(view.day), view.day !== today() && make('em', { text: 'not today' })),
-      make('button', { class: 'slim', 'aria-label': 'Day after',
+      view.day !== today() && make('button', {
+        onclick: function () { view.day = today(); load(); } }, 'Today'),
+      make('button', { class: 'step', 'aria-label': 'Day before',
+        onclick: function () { view.day = shiftDate(view.day, -1); load(); } }, '‹'),
+      make('button', { class: 'step', 'aria-label': 'Day after',
         onclick: function () { view.day = shiftDate(view.day, 1); load(); } }, '›')));
   }
 
@@ -166,11 +168,13 @@ function paintWeek(sheet) {
   var w = view.data;
 
   sheet.appendChild(make('div', { class: 'daybar' },
-    make('button', { class: 'slim', 'aria-label': 'Week before',
-      onclick: function () { view.weekFrom = shiftDate(view.weekFrom, -7); load(); } }, '\u2039'),
     make('h1', {}, shortDate(w.from) + ' to ' + shortDate(w.to),
       w.from !== mondayOf(today()) && make('em', { text: 'not this week' })),
-    make('button', { class: 'slim', 'aria-label': 'Week after',
+    w.from !== mondayOf(today()) && make('button', {
+      onclick: function () { view.weekFrom = mondayOf(today()); load(); } }, 'This week'),
+    make('button', { class: 'step', 'aria-label': 'Week before',
+      onclick: function () { view.weekFrom = shiftDate(view.weekFrom, -7); load(); } }, '\u2039'),
+    make('button', { class: 'step', 'aria-label': 'Week after',
       onclick: function () { view.weekFrom = shiftDate(view.weekFrom, 7); load(); } }, '\u203a')));
 
   var grid = make('div', { class: 'weekgrid' }, w.days.map(function (d) {
@@ -562,64 +566,92 @@ function paintSearch(sheet) {
 function paintToday(sheet) {
   var d = view.data;
 
-  sheet.appendChild(panel('How the day looks', [], figures([
-    { value: String(d.jobs.length), label: 'Jobs today' },
-    { value: String(d.on_the_clock.length), label: 'Out on jobs now' },
+  // Whatever is actually waiting on the office goes first. Everything else
+  // on this screen is something to look at, not something to do.
+  if (d.waiting > 0) {
+    sheet.appendChild(make('div', { class: 'needsyou' },
+      make('b', { text: d.waiting === 1
+        ? 'One set of hours is waiting on you'
+        : d.waiting + ' sets of hours are waiting on you' }),
+      make('button', { class: 'go', onclick: function () { goTab('hours'); } },
+        'Go through them')));
+  }
+
+  sheet.appendChild(make('div', { class: 'card' }, figures([
+    { value: String(d.jobs.length), label: d.jobs.length === 1 ? 'Job on' : 'Jobs on' },
+    { value: String(d.on_the_clock.length), label: 'Out there now' },
     { value: d.totals.hours.toFixed(2), label: 'Hours down' },
-    { value: String(d.waiting), label: 'Hours to OK' },
-    { value: CASH.format(d.totals.pay), label: 'Labour today' },
+    { value: CASH.format(d.totals.pay), label: 'Labour' },
   ])));
 
   if (d.on_the_clock.length) {
-    sheet.appendChild(panel('Out on jobs right now',
+    sheet.appendChild(panel('On the clock right now',
       [make('span', { class: 'pip', text: String(d.on_the_clock.length) })],
       make('ul', { class: 'rows' }, d.on_the_clock.map(function (s) {
-        return hourRow(s, { withName: true });
+        return hourRow(s, { withName: true, sameDay: s.work_date === view.day });
       }))));
   }
 
-  sheet.appendChild(panel('The board · ' + shortDate(view.day), [
+  sheet.appendChild(panel('The work', [
     make('span', { class: 'dim', style: 'font-size:15px',
       text: d.job_counts.assigned + ' not started · ' + d.job_counts.working +
             ' going · ' + d.job_counts.done + ' finished' }),
   ],
     d.jobs.length
-      ? make('ul', { class: 'jobs' }, d.jobs.map(officeJobItem))
+      ? make('ul', { class: 'jobs tight' }, d.jobs.map(officeJobItem))
       : make('div', { class: 'pad' },
           make('p', { class: 'none', text: 'No work on the board for this day.' }))));
 
-  sheet.appendChild(panel('Hours put down for ' + shortDate(view.day), [],
+  sheet.appendChild(panel('Hours put down', d.shifts.length
+    ? [make('span', { class: 'dim', style: 'font-size:15px',
+        text: d.totals.hours.toFixed(2) + ' hours · ' + CASH.format(d.totals.pay) })]
+    : [],
     d.shifts.length
       ? make('ul', { class: 'rows' }, d.shifts.map(function (s) {
-          return hourRow(s, { withName: true, withPay: true, buttons: shiftButtons(s) });
+          return hourRow(s, {
+            withName: true, withPay: true, quiet: true, sameDay: true,
+            buttons: shiftButtons(s),
+          });
         }))
       : make('div', { class: 'pad' },
           make('p', { class: 'none', text: 'Nothing down for this day.' }))));
 }
 
+/** A job as the office reads it: who it is for first, then the reference
+ *  bits on one line, then what needs doing. The buttons come last and stay
+ *  out of the way — this is a screen for looking at, mostly. */
 function officeJobItem(job) {
+  var crew = job.crew.map(function (c) { return c.name; }).join(', ');
+
+  var meta = make('p', { class: 'metaline' }, kindChip(job.kind));
+  var add = function (bit) {
+    if (!bit) return;
+    if (meta.childNodes.length) meta.appendChild(make('span', { class: 'gap', text: '\u00b7' }));
+    meta.appendChild(bit);
+  };
+
+  add(job.address && addressLink(job.address));
+  add(make('span', { text: crew || 'nobody on it' }));
+  if (job.est_hours) add(make('span', { text: job.est_hours + 'h' }));
+
   return make('li', {}, make('div', { class: 'bar ' + job.status }), make('div', {},
-    make('div', { class: 'jobline' },
-      kindChip(job.kind),
+    make('div', { class: 'headline' },
+      make('h3', { text: job.customer }),
       make('span', { class: 'progress ' + job.status, text: JOB_WORDS[job.status] })),
-    make('h3', { text: job.customer }),
-    job.address && make('p', { class: 'jobmeta' }, addressLink(job.address)),
-    make('p', { class: 'mates',
-      text: 'On it: ' + (job.crew.map(function (c) { return c.name; }).join(', ') || 'nobody') }),
+    meta,
     job.details && make('p', { class: 'jobdetail', text: job.details }),
     job.status === 'done' && job.wrap_notes &&
-      make('p', { class: 'jobdetail', text: 'Wrapped up: ' + job.wrap_notes }),
+      make('p', { class: 'jobdetail', text: '\u201c' + job.wrap_notes + '\u201d' }),
     job.status === 'done' && job.materials &&
       make('p', { class: 'mates', text: 'Parts used: ' + job.materials }),
     job.finished_by_name &&
       make('p', { class: 'mates', text: 'Finished by ' + job.finished_by_name }),
-    make('div', { class: 'inline' },
-      make('button', { class: 'slim', style: 'margin:0',
-        onclick: function () { view.editingJob = job.id; goTab('jobs'); } }, 'Change it'),
-      make('button', { class: 'slim', style: 'margin:0',
-        onclick: function () { repeatJob(job); } }, 'Put it out again'),
-      make('button', { class: 'slim', style: 'margin:0',
-        onclick: function () { removeJob(job); } }, 'Take it off'))));
+    make('div', { class: 'acts' },
+      make('button', {
+        onclick: function () { view.editingJob = job.id; goTab('jobs'); } }, 'Change'),
+      make('button', { onclick: function () { repeatJob(job); } }, 'Put it out again'),
+      make('button', { class: 'risky', onclick: function () { removeJob(job); } },
+        'Take it off'))));
 }
 
 /* Seasonal work is the same call round again: blowouts, startups, lamp checks. */
@@ -648,17 +680,17 @@ function repeatJob(job) {
 
 function shiftButtons(s) {
   return [
-    s.status === 'sent' && make('button', { class: 'slim go', style: 'margin:0',
+    s.status === 'sent' && make('button', { class: 'lead',
       onclick: function () { okThese(s); } }, 'These look right'),
-    s.status === 'sent' && make('button', { class: 'slim', style: 'margin:0',
+    s.status === 'sent' && make('button', {
       onclick: function () { askAbout(s); } }, 'Ask about it'),
-    s.status === 'ok' && make('button', { class: 'slim', style: 'margin:0',
+    s.status === 'ok' && make('button', {
       onclick: function () {
         then(api('/api/office/shifts/' + s.id + '/reopen', { method: 'POST' }), 'Put back.');
       } }, 'Put it back'),
-    s.status !== 'open' && make('button', { class: 'slim', style: 'margin:0',
+    s.status !== 'open' && make('button', {
       onclick: function () { changeTimes(s); } }, 'Change times'),
-    s.status !== 'open' && make('button', { class: 'slim', style: 'margin:0',
+    s.status !== 'open' && make('button', { class: 'risky',
       onclick: function () {
         if (!confirm("Take " + s.employee_name + "'s hours off for " + shortDate(s.work_date) + '?')) return;
         then(api('/api/office/shifts/' + s.id, { method: 'DELETE' }), 'Taken off.');
@@ -717,7 +749,7 @@ function paintHours(sheet) {
     list.length ? [make('span', { class: 'pip', text: String(list.length) })] : [],
     list.length
       ? make('ul', { class: 'rows' }, list.map(function (s) {
-          return hourRow(s, { withName: true, withPay: true, buttons: shiftButtons(s) });
+          return hourRow(s, { withName: true, withPay: true, quiet: true, buttons: shiftButtons(s) });
         }))
       : make('div', { class: 'pad' },
           make('p', { class: 'none', text: 'Nothing waiting. All caught up.' })),
@@ -1138,7 +1170,7 @@ function paintPay(sheet) {
   sheet.appendChild(panel('Every shift over those dates', [],
     shifts.length
       ? make('ul', { class: 'rows' }, shifts.map(function (s) {
-          return hourRow(s, { withName: true, withPay: true, buttons: shiftButtons(s) });
+          return hourRow(s, { withName: true, withPay: true, quiet: true, buttons: shiftButtons(s) });
         }))
       : make('div', { class: 'pad' }, make('p', { class: 'none', text: 'Nothing to show.' }))));
 }

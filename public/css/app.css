@@ -439,33 +439,48 @@ h3 {
 
 .daybar h1 {
   font-family: var(--head);
-  font-size: var(--t-lead);
+  font-size: var(--t-title);
   font-weight: 700;
-  letter-spacing: -.01em;
+  letter-spacing: -.012em;
   margin: 0;
   flex: 1;
-  text-align: center;
+  min-width: 0;
 }
 
+/* Off today is worth saying, but beside the date rather than under it. */
 .daybar h1 em {
-  display: block;
   font-size: var(--t-micro);
   font-style: normal;
   font-family: var(--body);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ink-soft);
-  margin-top: 2px;
+  background: var(--sunk);
+  border-radius: 999px;
+  padding: 2px 9px;
+  margin-left: var(--s2);
+  vertical-align: 3px;
+  white-space: nowrap;
 }
 
 .daybar button {
   width: auto;
   margin: 0;
+  flex: none;
+  /* Still a 44px target: the crew work these with gloves on. */
   min-height: 44px;
   min-width: 44px;
-  padding: 8px 14px;
-  font-size: var(--t-lead);
+  padding: 6px 12px;
+  font-size: var(--t-body);
+  font-weight: 600;
   line-height: 1;
   background: var(--sheet);
+}
+
+.daybar button.step { font-size: var(--t-lead); padding: 6px 13px; }
+
+@media (max-width: 460px) {
+  .daybar h1 { font-size: var(--t-lead); }
+  .daybar h1 em { display: none; }
 }
 
 /* ================= buttons ================= */
@@ -1088,3 +1103,135 @@ tfoot td { border-top: 2px solid var(--line-firm); font-weight: 700; background:
 }
 
 [hidden] { display: none !important; }
+
+/* ================= the dashboard ================= */
+
+/* What the day needs from the office, said once and up front rather than
+   left as the fourth number in a row of five. */
+.needsyou {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  padding: var(--s3) var(--s4);
+  margin-bottom: var(--s4);
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brass);
+  border-radius: var(--r-card);
+  box-shadow: var(--lift);
+}
+
+.needsyou b {
+  font-family: var(--head);
+  font-size: var(--t-body);
+  font-weight: 600;
+  letter-spacing: -.005em;
+  margin-right: auto;
+}
+
+.needsyou button {
+  width: auto;
+  margin: 0;
+  flex: none;
+  min-height: 38px;
+  padding: 7px 15px;
+  font-size: var(--t-small);
+}
+
+/* One line carrying the reference bits of a job: what kind, where, who.
+   Quieter than the customer name above it, and on one row where it fits. */
+.metaline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px var(--s2);
+  margin: 5px 0 0;
+  font-size: var(--t-small);
+  color: var(--ink-mid);
+}
+
+.metaline .gap { color: var(--line-firm); }
+
+/* An address is reference, not a call to action: readable, not shouting. */
+.metaline a {
+  color: inherit;
+  font-weight: 400;
+  text-decoration: underline;
+  text-decoration-color: var(--line-firm);
+  text-underline-offset: 3px;
+}
+
+.metaline a:hover { color: var(--go); text-decoration-color: currentColor; }
+
+/* Actions belong to the row they act on, so they sit below it and stay
+   quiet until wanted. One of them may be the obvious next thing. */
+.acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s4);
+  margin-top: var(--s3);
+}
+
+.acts button {
+  width: auto;
+  margin: 0;
+  min-height: 30px;
+  padding: 3px 0;
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: none;
+  color: var(--ink-soft);
+  font-size: var(--t-small);
+  font-weight: 600;
+}
+
+.acts button:hover:not(:disabled) {
+  background: none;
+  color: var(--go);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.acts button.risky:hover:not(:disabled) { color: var(--halt); }
+
+/* The one the office reaches for most keeps its weight. */
+.acts button.lead {
+  min-height: 34px;
+  padding: 6px 15px;
+  border-radius: 999px;
+  background: var(--go);
+  color: var(--go-in);
+  font-weight: 700;
+}
+
+.acts button.lead:hover:not(:disabled) {
+  background: var(--go);
+  color: var(--go-in);
+  filter: brightness(1.08);
+  text-decoration: none;
+}
+
+/* Rows on the office side carry more per line, so they breathe less. */
+.jobs.tight > li { padding: var(--s3) var(--s4); }
+.jobs.tight h3 { font-size: var(--t-body); margin: 0; }
+.jobs.tight .jobdetail { font-size: var(--t-small); color: var(--ink-mid); margin-top: 6px; }
+
+.headline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2) var(--s3);
+  flex-wrap: wrap;
+}
+
+.headline h3 { margin-right: auto; }
+
+/* The figures on their own, with no title over them: a strip, not a box
+   inside a box. */
+.card > .figures:first-child { border-top: 0; background: var(--sheet); }
+.card > .figures:first-child div { padding: var(--s4); }
+
+/* The state of a set of hours belongs beside whose they are. */
+.rows .headline { margin-bottom: 2px; }
+.rows .headline .state { margin-top: 0; }
