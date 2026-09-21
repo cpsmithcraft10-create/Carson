@@ -168,10 +168,34 @@ rail down the left that is always there, dense tables with the figures
 aligned, small type, hairline rules, and row actions that stay quiet until
 you reach for them.
 
-The crew run on a phone, outdoors, often with gloves on. Same palette, same
-components, same everything — set a size larger, spaced further apart, with
-a bar across the bottom your thumb reaches and buttons you cannot miss. It is
-not a different product, it is this one turned up.
+The crew run on a phone, outdoors, often with gloves on, and some of them are
+reading it through bifocals. Same palette, same components, same everything —
+set a size larger, spaced further apart, with a bar across the bottom your
+thumb reaches and buttons you cannot miss. It is not a different product, it
+is this one turned up.
+
+Their side is built for somebody who has never used an app before:
+
+- **The first thing on the screen is whether you are on the clock**, in the
+  same place every time, with the one button that does the next thing. Off the
+  clock it names the next job and says *Open this job*. On the clock it counts
+  the hours up and says *I'm done*.
+- **Nothing is smaller than 13.5px**, body text is 17px and the buttons you
+  press most are 62px tall.
+- **Rows say "Open"** rather than leaving a chevron to explain itself.
+- **Plain words.** Tabs read *My jobs*, *My hours*, *Messages*, *My details*.
+  Not "Take it off" but *Delete these hours*; not "Put hours down by hand" but
+  *Add hours myself*.
+- **The jobs screen is always today.** No date to get lost on — the office
+  hands work out a day at a time anyway. Going back to check or fix an earlier
+  day happens under **My hours**, with buttons that say *Day before* and
+  *Back to today*.
+- **It adds the hours up while you type.** Before you send anything it says
+  "That comes to 8 hours 26 minutes", and if the break does not fit inside the
+  shift it says exactly that instead of refusing when you press the button.
+- **It says a mistake is fixable**, because that is the thing people are
+  actually worried about: *the office checks it, and if anything looks off
+  they will ask you.*
 
 ## Putting it where the crew can reach it
 

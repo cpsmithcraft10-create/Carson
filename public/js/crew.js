@@ -91,7 +91,13 @@ function openJob(id) {
 
 /* ----------------------------- painting --------------------------- */
 
-var SCREENS = { jobs: 'My day', hours: 'My hours', notices: 'From the office', me: 'Me' };
+var SCREENS = {
+  jobs: 'My jobs', hours: 'My hours', notices: 'Messages', me: 'My details',
+};
+
+/* The office cares that a job is "being worked on". Standing in a driveway,
+   what you want to know is whether it is done. */
+var CREW_WORDS = { assigned: 'Not started', working: 'Started', done: 'Finished' };
 
 function paint() {
   TABS.forEach(function (t) {
@@ -106,9 +112,11 @@ function paint() {
 
   var sheet = emptyOut(document.getElementById('sheet'));
 
-  // The open job carries its own day, so the arrows only clutter it there.
-  var wantsDayBar = (view.tab === 'jobs' && !view.openJob) || view.tab === 'hours';
-  if (wantsDayBar) sheet.appendChild(dayBar());
+  // Jobs are always today's. Somebody who has never used an app before does
+  // not need to wonder why the screen says a date three days ago — and the
+  // office hands work out a day at a time anyway. Hours keep the arrows,
+  // because that is where you go back to fix yesterday.
+  if (view.tab === 'hours') sheet.appendChild(dayBar());
 
   if (view.flash) {
     sheet.appendChild(make('div', { class: 'flash ' + view.flash.kind, text: view.flash.message }));
@@ -127,13 +135,18 @@ function paint() {
 }
 
 function dayBar() {
-  return make('div', { class: 'daybar' },
-    make('button', { class: 'slim', 'aria-label': 'Day before',
-      onclick: function () { goDay(shiftDate(view.day, -1)); } }, '‹'),
-    make('h1', {}, longDate(view.day),
-      view.day !== today() && make('em', { text: 'not today — tap the arrow to come back' })),
-    make('button', { class: 'slim', 'aria-label': 'Day after',
-      onclick: function () { goDay(shiftDate(view.day, 1)); } }, '›'));
+  var isToday = view.day === today();
+
+  return make('div', {},
+    make('div', { class: 'daybar' },
+      make('h1', {}, longDate(view.day), !isToday && make('em', { text: 'not today' }))),
+    make('div', { class: 'inline', style: 'margin-top:0;margin-bottom:16px' },
+      make('button', { onclick: function () { goDay(shiftDate(view.day, -1)); } },
+        '← Day before'),
+      !isToday && make('button', { class: 'go', onclick: function () { goDay(today()); } },
+        'Back to today'),
+      !isToday && make('button', { onclick: function () { goDay(shiftDate(view.day, 1)); } },
+        'Day after →')));
 }
 
 function goDay(d) {
@@ -151,20 +164,50 @@ function goDay(d) {
 /* ------------------------- the list of jobs ----------------------- */
 
 function paintJobList(sheet) {
-  if (view.unread > 0) sheet.appendChild(unreadBanner());
+  // Clock state first, every time, in the same place. Somebody standing in a
+  // driveway needs to know whether they are on the clock before anything
+  // else on this screen matters.
   if (view.running) sheet.appendChild(onClockCard(view.running, { compact: true }));
+  else sheet.appendChild(whatNow());
+
+  if (view.unread > 0) sheet.appendChild(unreadBanner());
 
   var body = view.jobs.length
     ? make('ul', { class: 'picklist' }, view.jobs.map(jobRow))
     : make('div', { class: 'pad' },
-        make('p', { class: 'none', text: 'Nothing on your list for this day.' }));
+        make('p', { class: 'none', text: 'You have no jobs today.' }));
 
-  var card = panel('Your jobs · ' + shortDate(view.day),
+  var card = panel('Your jobs today',
     view.jobs.length ? [make('span', { class: 'pip', text: String(view.jobs.length) })] : [],
     body);
 
   card.appendChild(offListBit());
   sheet.appendChild(card);
+}
+
+/** Not on the clock: say so, and say what to do about it. */
+function whatNow() {
+  var next = view.jobs.filter(function (j) { return j.status !== 'done'; })[0];
+
+  if (!next) {
+    var allDone = view.jobs.length > 0;
+    return make('div', { class: 'rightnow' + (allDone ? ' finished' : '') },
+      make('p', { class: 'said',
+        text: allDone ? 'All your jobs are finished.' : 'You are not on the clock.' }),
+      make('p', { class: 'then',
+        text: allDone
+          ? 'Nothing else on for today. Your hours are with the office.'
+          : 'Nothing on your list today. If you are working, use the button below.' }));
+  }
+
+  return make('div', { class: 'rightnow' },
+    make('p', { class: 'said', text: 'You are not on the clock.' }),
+    make('p', { class: 'then', text: 'Next up: ' + next.customer
+      + (next.address ? ' \u2014 ' + next.address : '') }),
+    make('button', {
+      class: 'go',
+      onclick: function () { openJob(next.id); },
+    }, 'Open this job'));
 }
 
 function jobRow(job) {
@@ -178,8 +221,9 @@ function jobRow(job) {
       make('h3', { text: job.customer }),
       job.address && make('span', { class: 'jobmeta', style: 'display:block', text: job.address }),
       make('span', { class: 'progress ' + job.status, style: 'margin-top:6px',
-        text: JOB_WORDS[job.status] })),
-    make('span', { class: 'chev', 'aria-hidden': 'true' }, '\u203a')));
+        text: CREW_WORDS[job.status] })),
+    make('span', { class: 'opener' }, 'Open',
+      make('span', { class: 'chev', 'aria-hidden': 'true' }, '\u203a'))));
 }
 
 function offListBit() {
@@ -189,7 +233,7 @@ function offListBit() {
     tail.appendChild(make('button', {
       disabled: !!view.running,
       onclick: function () { view.offList = true; paint(); },
-    }, view.running ? 'Finish what you are on first' : 'Start something not on the list'));
+    }, view.running ? 'Finish what you are on first' : 'Work on something else'));
     return tail;
   }
 
@@ -250,7 +294,7 @@ function paintOneJob(sheet, job) {
   sheet.appendChild(panel('The job', [], make('div', { class: 'pad' },
     make('div', { class: 'jobline' },
       kindChip(job.kind),
-      make('span', { class: 'progress ' + job.status, text: JOB_WORDS[job.status] })),
+      make('span', { class: 'progress ' + job.status, text: CREW_WORDS[job.status] })),
     make('h3', { style: 'font-size:var(--t-title);margin:10px 0 2px', text: job.customer }),
     job.address && make('p', { class: 'jobmeta', text: job.address }),
     make('p', { class: 'needdoing', style: 'margin-top:14px',
@@ -400,10 +444,58 @@ function onClockCard(shift, opts) {
       make('label', { for: 'finish-break', text: 'Break, in minutes' }), brk,
       make('div', { style: 'margin-top:9px' },
         breakPicks(function () { return +brk.value || 0; },
-          function (m) { brk.value = String(m); })))));
+          function (m) { brk.value = String(m); brk.dispatchEvent(new Event('input')); })))));
 
   box.appendChild(make('div', { class: 'field' },
     make('label', { for: 'finish-note', text: 'What did you get done? (can be left empty)' }), said));
+
+  // Say the number out loud before they send it, and say that a mistake is
+  // not the end of the world. Both are things people ask out loud.
+  var tally = make('p', { class: 'reassure' });
+
+  var retally = function () {
+    emptyOut(tally);
+
+    // Typing in the box has to move the highlight too, or the buttons say
+    // 30 minutes while the field says 45.
+    var picks = box.querySelector('.picks');
+    var want = (+brk.value || 0) === 0 ? 'None' : (+brk.value || 0) + 'm';
+    if (picks) {
+      Array.prototype.forEach.call(picks.querySelectorAll('button'), function (one) {
+        one.setAttribute('aria-pressed', String(one.textContent === want));
+      });
+    }
+
+    if (!TIME_SHAPE.test(finish.value || '')) {
+      tally.append('Put the finish time in and this will tell you the hours.');
+      return;
+    }
+
+    var span = gap(shift.start_time, finish.value);
+    var mins = +brk.value || 0;
+
+    if (span === 0) {
+      tally.append('That is the same as your start time, so it comes to no hours '
+        + 'yet. Change the finish time when you are done.');
+      return;
+    }
+
+    if (mins >= span) {
+      tally.append('A ', make('b', { text: mins + ' minute break' }),
+        ' does not fit inside ', make('b', { text: inWords(span) }),
+        ' on the job. Check the break, or the finish time.');
+      return;
+    }
+
+    tally.append('That comes to ', make('b', { text: inWords(span - mins) }), '. ',
+      'The office checks it. If anything looks off they will ask you, and you '
+      + 'can change it then.');
+  };
+
+  retally();
+  finish.addEventListener('input', retally);
+  brk.addEventListener('input', retally);
+  box.appendChild(tally);
 
   box.appendChild(make('button', {
     class: 'stop',
@@ -453,6 +545,7 @@ function paintHours(sheet) {
 
   var list = make('ul', { class: 'rows' }, view.shifts.map(function (s) {
     return hourRow(s, {
+      sameDay: s.work_date === view.day,
       buttons: [
         s.status !== 'ok' && s.end_time && make('button', {
           class: 'slim', style: 'margin:0', onclick: function () { changeTimes(s); },
@@ -460,15 +553,15 @@ function paintHours(sheet) {
         s.status !== 'ok' && make('button', {
           class: 'slim', style: 'margin:0',
           onclick: function () {
-            if (!confirm('Take these hours off?')) return;
-            then(api('/api/crew/shifts/' + s.id, { method: 'DELETE' }), 'Taken off.');
+            if (!confirm('Delete these hours? They will not be counted.')) return;
+            then(api('/api/crew/shifts/' + s.id, { method: 'DELETE' }), 'Deleted. Those hours are not counted.');
           },
-        }, 'Take it off'),
+        }, 'Delete these hours'),
       ],
     });
   }));
 
-  sheet.appendChild(panel('What you put down · ' + shortDate(view.day), [],
+  sheet.appendChild(panel('What you put down', [],
     view.shifts.length
       ? list
       : make('div', { class: 'pad' }, make('p', { class: 'none', text: 'Nothing down for this day yet.' })),
@@ -507,9 +600,9 @@ function byHandCard() {
   if (!view.byHand) {
     return panel('Forgot to hit start?', [], make('div', { class: 'pad' },
       make('p', { class: 'none',
-        text: 'Put the hours down by hand instead. You can add as many as you need.' }),
+        text: 'Type the times in yourself instead. You can add as many as you need.' }),
       make('button', { onclick: function () { view.byHand = true; paint(); } },
-        'Put hours down by hand')));
+        'Add hours myself')));
   }
 
   // Their own jobs first, so the usual case needs no typing.
@@ -579,18 +672,17 @@ function byHandCard() {
 function weekCard() {
   var w = view.week;
 
+  // A three-column table needs sideways scrolling on a phone, which is one
+  // gesture too many here. Each day gets a line of its own instead.
   var body = w.shifts.length
-    ? make('div', { class: 'scroller' }, make('table', {},
-        make('thead', {}, make('tr', {},
-          make('th', { text: 'Day' }),
-          make('th', { text: 'Job' }),
-          make('th', { class: 'r', text: 'Hours' }))),
-        make('tbody', {}, w.shifts.map(function (s) {
-          return make('tr', {},
-            make('td', { text: shortDate(s.work_date) }),
-            make('td', { text: s.what }),
-            make('td', { class: 'r', text: s.end_time ? s.hours.toFixed(2) : '—' }));
-        }))))
+    ? make('ul', { class: 'facts', style: 'padding:0 16px' }, w.shifts.map(function (s) {
+        return make('li', {},
+          make('span', { class: 'tag', text: shortDate(s.work_date) }),
+          make('span', {},
+            make('span', { text: s.what }),
+            make('span', { class: 'clock', style: 'display:block',
+              text: s.end_time ? s.hours.toFixed(2) + ' hours' : 'still going' })));
+      }))
     : make('div', { class: 'pad' }, make('p', { class: 'none', text: 'Nothing down this week.' }));
 
   return panel('Your week · ' + shortDate(w.from) + ' to ' + shortDate(w.to), [], body,
@@ -604,7 +696,7 @@ function weekCard() {
 /* ----------------------------- notices ---------------------------- */
 
 function unreadBanner() {
-  return make('div', { class: 'card', style: 'border-color:var(--brass);border-width:2px' },
+  return make('div', { class: 'card', style: 'border-left:3px solid var(--warn)' },
     make('div', { class: 'pad' },
       make('h3', { text: view.unread === 1
         ? 'There is a new announcement from the office'

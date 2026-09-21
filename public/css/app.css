@@ -156,18 +156,22 @@
   --shadow-pop: 0 6px 20px rgba(0, 0, 0, .55);
 }
 
-/* The crew hold this at arm's length, outdoors, wearing gloves. Same
-   components, same palette, turned up a size and given room. */
+/* The crew hold this at arm's length, outdoors, wearing gloves, and some of
+   them are reading it through bifocals. Same components, same palette, set
+   up a size and given room. Nothing here goes below 13.5px. */
 body.crew {
-  --t-micro: 12.5px;
-  --t-small: 14px;
-  --t-body:  16px;
-  --t-lead:  17.5px;
-  --t-title: 20px;
-  --t-head:  23px;
-  --t-big:   30px;
-  --ctl:     48px;
+  --t-micro: 13.5px;
+  --t-small: 15px;
+  --t-body:  17px;
+  --t-lead:  19px;
+  --t-title: 21px;
+  --t-head:  24px;
+  --t-big:   32px;
+  --ctl:     52px;
 }
+
+body.crew button.go,
+body.crew button.stop { min-height: 62px; font-size: var(--t-lead); }
 
 /* ================================= base ================================ */
 
@@ -1366,3 +1370,70 @@ a.linkout {
   .dot { animation: none; }
   *, *::before, *::after { transition-duration: .01ms !important; }
 }
+
+/* ===================== the crew's "what now" card ===================== */
+
+/* The first thing on the screen answers the two questions somebody standing
+   in a driveway actually has: am I on the clock, and what do I do next. */
+.rightnow {
+  padding: var(--s4);
+  margin-bottom: var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+}
+
+.rightnow .said {
+  font-size: var(--t-lead);
+  font-weight: 650;
+  letter-spacing: -.01em;
+}
+
+.rightnow .then {
+  margin-top: var(--s1);
+  font-size: var(--t-body);
+  color: var(--ink-2);
+}
+
+.rightnow.finished {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+.rightnow.finished .said { color: var(--accent); }
+
+/* An "open this" that says so, rather than leaving a chevron to explain
+   itself to somebody who has never used an app before. */
+.opener {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--t-small);
+  font-weight: 650;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.opener .chev { font-size: var(--t-lead); color: inherit; }
+
+/* Plain-spoken reassurance under a form the crew are nervous about. */
+.reassure {
+  margin-top: var(--s3);
+  padding: 10px 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  font-size: var(--t-small);
+  color: var(--ink-2);
+}
+
+.reassure b { color: var(--ink); }
+
+/* On a phone every button gets the full width: two half-width buttons side
+   by side is how somebody taps the wrong one. */
+body.crew .inline button { flex: 1 1 100%; }
+
+/* Stepping to another day is a small errand, not the main event. */
+body.crew .daybar + .inline button { flex: 0 1 auto; min-height: 44px; }
+
+body.crew .facts > li { padding: 12px 0; }
