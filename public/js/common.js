@@ -36,6 +36,11 @@ function api(path, opts) {
     method: opts.method || 'GET',
     headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
+  }).catch(function () {
+    /* Out of range, in a basement, or the office box is down. Whatever the
+       browser calls that — "Failed to fetch", "Load failed" — is no use to
+       somebody standing in a driveway. */
+    throw new Error('No signal just now. Try again when you have a bar.');
   }).then(function (res) {
     return res.text().then(function (text) {
       if (res.status === 401 && bounceOnExpiry) {
@@ -389,4 +394,21 @@ function initialsOf(name) {
   if (!parts.length) return '?';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/* ------------------------- on the home screen ------------------------- */
+
+/* Keeps the app's own files on the phone so the icon opens straight into the
+   screen, with or without signal. Nothing the office typed is kept — see
+   sw.js. A phone too old for this simply carries on fetching everything. */
+var CAN_INSTALL = location.protocol === 'https:'
+  || location.hostname === 'localhost'
+  || location.hostname === '127.0.0.1';
+
+if ('serviceWorker' in navigator && CAN_INSTALL) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js').catch(function () {
+      /* An old phone, or a private window. The app still works. */
+    });
+  });
 }

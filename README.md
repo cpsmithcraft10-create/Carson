@@ -252,13 +252,44 @@ forwarding `X-Forwarded-Proto`. Do not put port 3000 straight on the internet.
 
 Back up `data/custom-outdoor.db` — that one file is every hour anybody worked.
 
+## Getting it onto their phones
+
+There is no app store to go through. Once it is running behind HTTPS, the
+crew's phones treat it as an app: an icon on the home screen, no browser bar,
+and it opens straight into their day.
+
+Send everybody one link — `https://your-address/install.html` — and that page
+works out which phone they are holding and gives them the three taps:
+
+- **iPhone**, in Safari: share button, **Add to Home Screen**, **Add**.
+- **Android**, in Chrome: the three dots, **Install app**. That page offers a
+  single button instead when the phone lets it, so most of them never read the
+  steps.
+
+Then they sign in once with their name and number. The session lasts a month,
+so from the next morning on it is tap the icon and the jobs are there.
+
+Two things make that work, both of them in `public/`:
+
+- `app.webmanifest` — the name, the icons and `display: standalone`, which is
+  what drops the browser bar. The icons are drawn by `npm run icons` from the
+  same mark as the favicon; run it if the mark changes.
+- `sw.js` — keeps the screen, the stylesheet and the scripts on the handset,
+  so the icon opens at once in a basement or down a driveway with one bar. It
+  never caches anything under `/api/`: jobs, hours and announcements always
+  come from the office, because a stale job list is worse than none.
+
+**It has to be HTTPS.** Neither the home-screen install nor the offline part
+happens over plain HTTP — phones refuse both. `http://localhost` is the one
+exception, which is how you try it on the machine you are developing on.
+
 ## Tests
 
 ```bash
 npm test
 ```
 
-89 tests covering the hours arithmetic (breaks, work past midnight, rounding),
+93 tests covering the hours arithmetic (breaks, work past midnight, rounding),
 a whole day from giving out a job through to payroll, two people on one job,
 work that was never on a list, announcements and who read them, a job running
 over two days, customers and their history, putting a job out again week after
@@ -268,7 +299,9 @@ row, a byte-order mark) and bringing it in twice without doubling anybody up
 or writing over a note somebody left, and the boundaries: the crew cannot
 reach the office side, cannot log against somebody else's job, cannot bring a
 customer list in, cannot reach billing or the QuickBooks keys, and cannot
-change hours already OK'd.
+change hours already OK'd. Four more check what a phone needs before it will
+put this on a home screen: the manifest, the icons it names, the tags on every
+screen, and that the service worker caches no part of the office's own work.
 
 The billing half of that runs the whole send-an-invoice path against a
 QuickBooks that lives in a variable: the invoice body Intuit is handed, the
@@ -293,7 +326,12 @@ src/routes/          sign-in, crew and office endpoints
 public/index.html    sign in
 public/crew.html     the crew screen
 public/office.html   the office screen
+public/install.html  the page the crew are sent to put it on their phone
+public/app.webmanifest  what makes it an app on a phone
+public/sw.js         keeps the screens on the handset; never the work
+public/icons/        the home-screen icons
 scripts/setup.js     makes the first office account
 scripts/sample.js    loads sample data
+scripts/icons.js     draws the home-screen icons from the house mark
 test/                the tests
 ```

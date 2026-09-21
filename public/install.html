@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Put this on your phone &middot; Custom Outdoor Design</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
+  <link rel="manifest" href="/app.webmanifest">
+  <meta name="theme-color" content="#17402e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Outdoor">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="crew">
+  <main class="signin">
+    <div class="card">
+      <div class="crest">
+        <img src="/icons/icon-192.png" width="64" height="64" alt="">
+        <h1>Put this on your phone</h1>
+        <p>Custom Outdoor Design</p>
+      </div>
+
+      <div class="pad">
+        <p class="dim" id="lede">
+          Three taps and it sits on your home screen with your other apps.
+          Open it with the icon from then on.
+        </p>
+
+        <ul class="facts" id="steps"></ul>
+
+        <button class="go" id="install" hidden>Add it to my home screen</button>
+
+        <div class="reassure">
+          <b>You only sign in once.</b> It keeps you signed in for a month, so
+          most mornings you tap the icon and your jobs are there.
+        </div>
+
+        <p class="none" style="margin-top:14px">
+          Stuck? Ask the office and they will walk you through it.
+        </p>
+
+        <p style="margin-top:14px">
+          <a class="linkout" href="/">Go to sign in</a>
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <script>
+  (function () {
+    'use strict';
+
+    /* Every phone hides this in a different place, so only the steps for the
+       phone in somebody's hand are shown. Guessing wrong is worse than
+       useless to somebody who has never installed anything, so an unfamiliar
+       phone gets the plain version of the same errand. */
+
+    var ua = navigator.userAgent || '';
+    var isIOS = /iPad|iPhone|iPod/.test(ua)
+      || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    var isAndroid = /Android/.test(ua);
+    var inSafari = isIOS && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
+
+    var STEPS = {
+      ios: [
+        'Tap the share button at the bottom of the screen — the square with an arrow coming out of it.',
+        'Scroll down the list and tap <b>Add to Home Screen</b>.',
+        'Tap <b>Add</b> in the top corner. The icon is now on your home screen.'
+      ],
+      iosOther: [
+        'Open this page in <b>Safari</b> first — copy the address, or ask the office to text it to you again and open the link from Messages.',
+        'Tap the share button at the bottom — the square with an arrow coming out of it.',
+        'Tap <b>Add to Home Screen</b>, then <b>Add</b>.'
+      ],
+      android: [
+        'Tap the three dots in the top corner of the browser.',
+        'Tap <b>Install app</b>, or <b>Add to Home screen</b> if that is what it says.',
+        'Tap <b>Install</b>. The icon is now on your home screen.'
+      ],
+      other: [
+        'Open your browser’s menu — the three dots or three lines in the corner.',
+        'Look for <b>Install</b> or <b>Add to Home screen</b> and tap it.',
+        'Say yes to the box that comes up.'
+      ]
+    };
+
+    var which = isIOS ? (inSafari ? 'ios' : 'iosOther') : (isAndroid ? 'android' : 'other');
+
+    var list = document.getElementById('steps');
+    STEPS[which].forEach(function (text, i) {
+      var li = document.createElement('li');
+      var tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = 'Step ' + (i + 1);
+      var body = document.createElement('span');
+      body.innerHTML = text;
+      li.appendChild(tag);
+      li.appendChild(body);
+      list.appendChild(li);
+    });
+
+    // Already opened from the icon — there is nothing left to do.
+    var standalone = window.matchMedia('(display-mode: standalone)').matches
+      || navigator.standalone === true;
+
+    if (standalone) {
+      document.getElementById('lede').textContent =
+        'This is already on your phone — you are looking at it from the icon now.';
+      list.hidden = true;
+    }
+
+    /* Android and desktop Chrome will do the whole thing on one button, if
+       the browser offers. When it does, that beats reading the steps. */
+    var button = document.getElementById('install');
+    var offer = null;
+
+    window.addEventListener('beforeinstallprompt', function (event) {
+      event.preventDefault();
+      offer = event;
+      if (standalone) return;
+      list.hidden = true;
+      button.hidden = false;
+    });
+
+    button.addEventListener('click', function () {
+      if (!offer) return;
+      button.disabled = true;
+      offer.prompt();
+      offer.userChoice.then(function (choice) {
+        offer = null;
+        if (choice.outcome === 'accepted') {
+          button.hidden = true;
+          document.getElementById('lede').textContent =
+            'Done. The icon is on your home screen — open it from there from now on.';
+        } else {
+          // They said no; put the steps back so they can do it by hand later.
+          button.hidden = true;
+          list.hidden = false;
+        }
+      });
+    });
+
+    window.addEventListener('appinstalled', function () {
+      button.hidden = true;
+      list.hidden = true;
+      document.getElementById('lede').textContent =
+        'Done. The icon is on your home screen — open it from there from now on.';
+    });
+  }());
+  </script>
+
+  <script src="/js/common.js"></script>
+</body>
+</html>

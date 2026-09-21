@@ -10,6 +10,7 @@
     "start": "node server.js",
     "setup": "node scripts/setup.js",
     "sample": "node scripts/sample.js",
+    "icons": "node scripts/icons.js",
     "test": "node --test \"test/*.test.js\""
   },
   "license": "UNLICENSED"
