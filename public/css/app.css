@@ -14,53 +14,82 @@
 :root {
   color-scheme: light dark;
 
-  /* Near monochrome, on purpose. Green on a landscaping app is the colour
-     anybody picks in five seconds; spending it on buttons, links, chips and
-     stripes is what makes software look templated. It is kept for the mark
-     and nothing else, and the work itself is set in ink on paper. */
-  --bg:          #f6f6f4;
+  /* A palette with some life in it, built rather than picked. Every hue
+     sits at roughly the same lightness and chroma, so they read as one
+     family and not as a handful of colours that happened to be nearby.
+     Each one has a job: the trades, the state of a job, the state of a
+     timesheet. Nothing here is decoration. */
+
+  /* Ground has a whisper of green in it, so the brand sits on it naturally
+     rather than being dropped on a clinical grey. */
+  --bg:          #eaf1ec;
   --surface:     #ffffff;
-  --surface-2:   #fafaf8;
-  --surface-3:   #f0f0ed;
-  --line:        #e6e6e2;
-  --line-2:      #d6d6d1;
-  --line-3:      #b2b2ac;
+  --surface-2:   #f3f8f4;
+  --surface-3:   #e6efe9;
+  --line:        #d8e4db;
+  --line-2:      #c2d2c7;
+  --line-3:      #9db0a4;
 
-  --ink:         #17181a;
-  --ink-2:       #5d6165;
-  --ink-3:       #8e9296;
-  --ink-on-dark: #f7f7f5;
+  --ink:         #14211a;
+  --ink-2:       #52635a;
+  --ink-3:       #7d8f85;
+  --ink-on-dark: #f4f7f5;
 
-  /* What you press is near black. Nothing else competes with it. */
-  --action:      #1b1d20;
-  --action-2:    #34383d;
+  /* The house colour, and what you press. */
+  --brand:       #0f8a55;
+  --brand-2:     #0b6f44;
+  --brand-soft:  #e2f4ea;
+  --brand-line:  #a8dcc1;
+
+  --action:      #0f8a55;
+  --action-2:    #0b6f44;
   --on-action:   #ffffff;
 
-  /* The house mark, and only the house mark. */
-  --brand:       #143d2b;
-
-  /* Kept for the rare places a tint still earns its keep. */
-  --accent:      #1b1d20;
-  --accent-2:    #34383d;
-  --accent-soft: #f0f0ed;
-  --accent-line: #d6d6d1;
+  --accent:      #0f8a55;
+  --accent-2:    #0b6f44;
+  --accent-soft: #e2f4ea;
+  --accent-line: #a8dcc1;
   --on-accent:   #ffffff;
 
-  /* State. Small, quiet, and never decorative. */
-  --live:        #4a5056;
-  --live-soft:   #f0f0ed;
-  --warn:        #8a6410;
-  --warn-soft:   #f7f1e2;
-  --danger:      #9c3328;
-  --danger-soft: #f8eae8;
-  --done:        #1d6b43;
-  --done-soft:   #eaf2ed;
+  /* State. Tinted, so a row carries its status at a glance. */
+  --live:        #0e7c9e;
+  --live-soft:   #e0f1f7;
+  --live-line:   #a5d6e6;
 
-  /* A dot's worth of colour to tell the trades apart. The word stays grey. */
-  --sprinkler:   #2f6f99;
-  --lighting:    #9a7420;
-  --drainage:    #6b6152;
-  --other:       #8e9296;
+  --warn:        #b07414;
+  --warn-soft:   #fdf1db;
+  --warn-line:   #ecc887;
+
+  --danger:      #c03a2b;
+  --danger-soft: #fcecea;
+  --danger-line: #f0b3ab;
+
+  --done:        #0f8a55;
+  --done-soft:   #e2f4ea;
+  --done-line:   #a8dcc1;
+
+  --hold:        #5a6b7a;
+  --hold-soft:   #eef2f5;
+  --hold-line:   #c3d0da;
+
+  /* The trades, each with a tint to sit on. */
+  --sprinkler:      #1668b8;
+  --sprinkler-soft: #e4effb;
+  --lighting:       #b07414;
+  --lighting-soft:  #fdf1db;
+  --drainage:       #9c5a33;
+  --drainage-soft:  #f9ece3;
+  --other:          #5a5fb8;
+  --other-soft:     #eaebf9;
+
+  /* People. Six harmonised tints, picked by name, so a face in a list is
+     recognisable before you have read it. */
+  --who-1: #1668b8;  --who-1-soft: #e4effb;
+  --who-2: #0f8a55;  --who-2-soft: #e2f4ea;
+  --who-3: #b07414;  --who-3-soft: #fdf1db;
+  --who-4: #9c5a33;  --who-4-soft: #f9ece3;
+  --who-5: #5a5fb8;  --who-5-soft: #eaebf9;
+  --who-6: #0e7c9e;  --who-6-soft: #e0f1f7;
 
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           "Helvetica Neue", Arial, "Noto Sans", sans-serif;
@@ -91,43 +120,68 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg:          #0f1011;
-    --surface:     #171819;
-    --surface-2:   #1c1d1f;
-    --surface-3:   #232527;
-    --line:        #2a2c2e;
-    --line-2:      #3a3d40;
-    --line-3:      #585c60;
+    --bg:          #0d1210;
+    --surface:     #141b17;
+    --surface-2:   #18211c;
+    --surface-3:   #1f2a23;
+    --line:        #27332c;
+    --line-2:      #36453b;
+    --line-3:      #55685c;
 
-    --ink:         #f0f0ee;
-    --ink-2:       #a9adb1;
-    --ink-3:       #7d8286;
+    --ink:         #eaf2ec;
+    --ink-2:       #a4b5aa;
+    --ink-3:       #7b8d82;
 
-    --action:      #f0f0ee;
-    --action-2:    #d8d8d4;
-    --on-action:   #17181a;
+    --brand:       #34b87a;
+    --brand-2:     #4ccb8f;
+    --brand-soft:  #10291d;
+    --brand-line:  #235c40;
 
-    --brand:       #5fa583;
+    --action:      #34b87a;
+    --action-2:    #4ccb8f;
+    --on-action:   #06170e;
 
-    --accent:      #f0f0ee;
-    --accent-2:    #d8d8d4;
-    --accent-soft: #232527;
-    --accent-line: #3a3d40;
-    --on-accent:   #17181a;
+    --accent:      #34b87a;
+    --accent-2:    #4ccb8f;
+    --accent-soft: #10291d;
+    --accent-line: #235c40;
+    --on-accent:   #06170e;
 
-    --live:        #9aa0a6;
-    --live-soft:   #232527;
-    --warn:        #d3a24d;
-    --warn-soft:   #2a2213;
-    --danger:      #dd7a67;
-    --danger-soft: #2d1715;
-    --done:        #5fa583;
-    --done-soft:   #16251d;
+    --live:        #55b4d4;
+    --live-soft:   #0f2630;
+    --live-line:   #23576c;
 
-    --sprinkler:   #78a8cc;
-    --lighting:    #c9a35c;
-    --drainage:    #ab9f8c;
-    --other:       #8e9296;
+    --warn:        #dcab4c;
+    --warn-soft:   #2b2210;
+    --warn-line:   #63501f;
+
+    --danger:      #e5836f;
+    --danger-soft: #2e1714;
+    --danger-line: #6d352c;
+
+    --done:        #34b87a;
+    --done-soft:   #10291d;
+    --done-line:   #235c40;
+
+    --hold:        #93a6b3;
+    --hold-soft:   #1b2429;
+    --hold-line:   #39474f;
+
+    --sprinkler:      #64a8e8;
+    --sprinkler-soft: #10202f;
+    --lighting:       #dcab4c;
+    --lighting-soft:  #2b2210;
+    --drainage:       #c9895f;
+    --drainage-soft:  #2a1c13;
+    --other:          #8f93e0;
+    --other-soft:     #1b1c30;
+
+    --who-1: #64a8e8;  --who-1-soft: #10202f;
+    --who-2: #34b87a;  --who-2-soft: #10291d;
+    --who-3: #dcab4c;  --who-3-soft: #2b2210;
+    --who-4: #c9895f;  --who-4-soft: #2a1c13;
+    --who-5: #8f93e0;  --who-5-soft: #1b1c30;
+    --who-6: #55b4d4;  --who-6-soft: #0f2630;
 
     --shadow: none;
     --shadow-pop: 0 6px 20px rgba(0, 0, 0, .55);
@@ -135,43 +189,68 @@
 }
 
 :root[data-theme="dark"] {
-  --bg:          #0f1011;
-  --surface:     #171819;
-  --surface-2:   #1c1d1f;
-  --surface-3:   #232527;
-  --line:        #2a2c2e;
-  --line-2:      #3a3d40;
-  --line-3:      #585c60;
+  --bg:          #0d1210;
+  --surface:     #141b17;
+  --surface-2:   #18211c;
+  --surface-3:   #1f2a23;
+  --line:        #27332c;
+  --line-2:      #36453b;
+  --line-3:      #55685c;
 
-  --ink:         #f0f0ee;
-  --ink-2:       #a9adb1;
-  --ink-3:       #7d8286;
+  --ink:         #eaf2ec;
+  --ink-2:       #a4b5aa;
+  --ink-3:       #7b8d82;
 
-  --action:      #f0f0ee;
-  --action-2:    #d8d8d4;
-  --on-action:   #17181a;
+  --brand:       #34b87a;
+  --brand-2:     #4ccb8f;
+  --brand-soft:  #10291d;
+  --brand-line:  #235c40;
 
-  --brand:       #5fa583;
+  --action:      #34b87a;
+  --action-2:    #4ccb8f;
+  --on-action:   #06170e;
 
-  --accent:      #f0f0ee;
-  --accent-2:    #d8d8d4;
-  --accent-soft: #232527;
-  --accent-line: #3a3d40;
-  --on-accent:   #17181a;
+  --accent:      #34b87a;
+  --accent-2:    #4ccb8f;
+  --accent-soft: #10291d;
+  --accent-line: #235c40;
+  --on-accent:   #06170e;
 
-  --live:        #9aa0a6;
-  --live-soft:   #232527;
-  --warn:        #d3a24d;
-  --warn-soft:   #2a2213;
-  --danger:      #dd7a67;
-  --danger-soft: #2d1715;
-  --done:        #5fa583;
-  --done-soft:   #16251d;
+  --live:        #55b4d4;
+  --live-soft:   #0f2630;
+  --live-line:   #23576c;
 
-  --sprinkler:   #78a8cc;
-  --lighting:    #c9a35c;
-  --drainage:    #ab9f8c;
-  --other:       #8e9296;
+  --warn:        #dcab4c;
+  --warn-soft:   #2b2210;
+  --warn-line:   #63501f;
+
+  --danger:      #e5836f;
+  --danger-soft: #2e1714;
+  --danger-line: #6d352c;
+
+  --done:        #34b87a;
+  --done-soft:   #10291d;
+  --done-line:   #235c40;
+
+  --hold:        #93a6b3;
+  --hold-soft:   #1b2429;
+  --hold-line:   #39474f;
+
+  --sprinkler:      #64a8e8;
+  --sprinkler-soft: #10202f;
+  --lighting:       #dcab4c;
+  --lighting-soft:  #2b2210;
+  --drainage:       #c9895f;
+  --drainage-soft:  #2a1c13;
+  --other:          #8f93e0;
+  --other-soft:     #1b1c30;
+
+  --who-1: #64a8e8;  --who-1-soft: #10202f;
+  --who-2: #34b87a;  --who-2-soft: #10291d;
+  --who-3: #dcab4c;  --who-3-soft: #2b2210;
+  --who-4: #c9895f;  --who-4-soft: #2a1c13;
+  --who-5: #8f93e0;  --who-5-soft: #1b1c30;
+  --who-6: #55b4d4;  --who-6-soft: #0f2630;
 
   --shadow: none;
   --shadow-pop: 0 6px 20px rgba(0, 0, 0, .55);
@@ -305,14 +384,22 @@ a { color: var(--accent); }
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--accent-line);
+  background: var(--who-2-soft);
+  color: var(--who-2);
   display: grid;
   place-items: center;
   font-size: var(--t-small);
-  font-weight: 650;
+  font-weight: 700;
+  letter-spacing: -.01em;
 }
+
+/* Picked from the name, so the same person is the same colour everywhere. */
+.avatar.w1 { background: var(--who-1-soft); color: var(--who-1); }
+.avatar.w2 { background: var(--who-2-soft); color: var(--who-2); }
+.avatar.w3 { background: var(--who-3-soft); color: var(--who-3); }
+.avatar.w4 { background: var(--who-4-soft); color: var(--who-4); }
+.avatar.w5 { background: var(--who-5-soft); color: var(--who-5); }
+.avatar.w6 { background: var(--who-6-soft); color: var(--who-6); }
 
 .who b {
   display: block;
@@ -359,17 +446,29 @@ a { color: var(--accent); }
   cursor: pointer;
 }
 
-.tabs button svg { flex: none; width: 17px; height: 17px; opacity: .8; }
+.tabs button svg { flex: none; width: 17px; height: 17px; }
+
+/* Each section keeps a colour of its own, so the rail is learned by eye
+   rather than read every time. */
+#tab-today     svg { color: var(--warn); }
+#tab-week      svg { color: var(--other); }
+#tab-hours     svg { color: var(--live); }
+#tab-jobs      svg { color: var(--sprinkler); }
+#tab-customers svg { color: var(--drainage); }
+#tab-billing   svg { color: var(--brand); }
+#tab-notices   svg { color: var(--other); }
+#tab-crew      svg { color: var(--live); }
+#tab-pay       svg { color: var(--brand); }
 .tabs button > span:first-of-type { margin-right: auto; }
 .tabs button:hover { background: var(--surface-3); color: var(--ink); }
 
 .tabs button[aria-selected="true"] {
-  background: var(--surface-3);
-  color: var(--ink);
+  background: var(--brand-soft);
+  color: var(--brand-2);
   font-weight: 650;
 }
 
-.tabs button[aria-selected="true"] svg { opacity: 1; }
+.tabs button[aria-selected="true"] { box-shadow: inset 0 0 0 1px var(--brand-line); }
 
 .pipdot {
   flex: none;
@@ -566,6 +665,7 @@ body.crew .sheet {
   flex-wrap: wrap;
   padding: var(--s3) var(--s4);
   border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
 }
 
 .card-top h2 {
@@ -594,18 +694,29 @@ body.crew .sheet {
   flex-wrap: wrap;
   gap: var(--s2) var(--s6);
   padding: var(--s4);
+  background: var(--surface-2);
 }
 
-.figures div { display: flex; align-items: baseline; gap: 7px; }
+.figures div {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding-left: 11px;
+  border-left: 2px solid var(--brand-line);
+}
+
+.figures div:nth-child(2) { border-left-color: var(--live-line); }
+.figures div:nth-child(3) { border-left-color: var(--warn-line); }
+.figures div:nth-child(4) { border-left-color: var(--other-soft); }
 
 .figures b {
-  font-size: var(--t-lead);
+  font-size: var(--t-title);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -.015em;
+  letter-spacing: -.02em;
 }
 
-.figures span { font-size: var(--t-small); color: var(--ink-3); }
+.figures span { font-size: var(--t-small); color: var(--ink-2); }
 
 @media (max-width: 560px) {
   .figures { gap: var(--s2) var(--s5); }
@@ -875,24 +986,25 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 
 /* ============================== what needs you ========================= */
 
-/* What needs doing, said once. A tinted box with a coloured border is the
-   alert component every admin template ships; a line of type and the button
-   that answers it carries the same weight without the costume. */
+/* What needs doing. It is the one thing on the screen asking for something,
+   so it is allowed to be the warmest thing on it. */
 .needsyou {
   display: flex;
   align-items: center;
   gap: var(--s3);
   flex-wrap: wrap;
-  padding: 0 0 var(--s4);
+  padding: var(--s3) var(--s4);
   margin-bottom: var(--s4);
-  border-bottom: 1px solid var(--line);
+  background: var(--warn-soft);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-lg);
 }
 
 .needsyou b {
   margin-right: auto;
-  font-size: var(--t-title);
+  font-size: var(--t-lead);
   font-weight: 650;
-  letter-spacing: -.015em;
+  letter-spacing: -.012em;
   color: var(--ink);
 }
 
@@ -900,14 +1012,19 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 
 /* ============================== trade + state ========================== */
 
-/* The word does the work. The dot is the only colour, and it is small. */
+/* Each trade gets a chip it can be spotted by across a full screen of
+   work. Sentence case, because shouting is not the same as being seen. */
 .kind {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--t-small);
-  font-weight: 500;
+  gap: 5px;
+  padding: 2px 9px 2px 7px;
+  border-radius: 999px;
+  font-size: var(--t-micro);
+  font-weight: 650;
+  letter-spacing: .005em;
   color: var(--ink-2);
+  background: var(--surface-3);
 }
 
 .kind::before {
@@ -916,13 +1033,13 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--ink-3);
+  background: currentColor;
 }
 
-.kind.sprinkler::before { background: var(--sprinkler); }
-.kind.lighting::before  { background: var(--lighting); }
-.kind.drainage::before  { background: var(--drainage); }
-.kind.other::before     { background: var(--other); }
+.kind.sprinkler { color: var(--sprinkler); background: var(--sprinkler-soft); }
+.kind.lighting  { color: var(--lighting);  background: var(--lighting-soft); }
+.kind.drainage  { color: var(--drainage);  background: var(--drainage-soft); }
+.kind.other     { color: var(--other);     background: var(--other-soft); }
 
 .progress {
   display: inline-flex;
@@ -942,15 +1059,28 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
   background: var(--line-3);
 }
 
-.progress.assigned::before { background: var(--line-3); }
+.progress.assigned::before { background: var(--hold); }
 .progress.working::before  { background: var(--live); }
 .progress.done::before     { background: var(--done); }
-.progress.working { color: var(--live); }
-.progress.done    { color: var(--done); }
+.progress.assigned { color: var(--hold); }
+.progress.working  { color: var(--live); }
+.progress.done     { color: var(--done); }
 
-/* No coloured rail down the side of every row. The status already says it
-   in words, and a stripe on each one only makes the page louder. */
-.bar, .tick { display: none; }
+/* The rail down the side of a row carries its state, so a list can be read
+   by colour before it is read by word. It is the trade on a job and the
+   state on a timesheet — never decoration. */
+.bar, .tick { border-radius: 3px; }
+
+.bar.assigned { background: var(--hold); }
+.bar.working  { background: var(--live); }
+.bar.done     { background: var(--done); }
+.bar          { background: var(--line-2); }
+
+.tick          { background: var(--line-2); }
+.tick.open     { background: var(--live); }
+.tick.sent     { background: var(--warn); }
+.tick.ok       { background: var(--done); }
+.tick.question { background: var(--danger); }
 
 .state {
   display: inline-block;
@@ -962,10 +1092,10 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
   white-space: nowrap;
 }
 
-.state.open     { background: var(--live-soft);   color: var(--live);   border-color: color-mix(in srgb, var(--live) 26%, transparent); }
-.state.sent     { background: var(--surface-3);   color: var(--ink-2);  border-color: var(--line-2); }
-.state.ok       { background: var(--done-soft);   color: var(--done);   border-color: color-mix(in srgb, var(--done) 26%, transparent); }
-.state.question { background: var(--danger-soft); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 26%, transparent); }
+.state.open     { background: var(--live-soft);   color: var(--live);   border-color: var(--live-line); }
+.state.sent     { background: var(--warn-soft);   color: var(--warn);   border-color: var(--warn-line); }
+.state.ok       { background: var(--done-soft);   color: var(--done);   border-color: var(--done-line); }
+.state.question { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-line); }
 
 .asked {
   margin-top: var(--s2);
@@ -981,6 +1111,9 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 .jobs { list-style: none; margin: 0; padding: 0; }
 
 .jobs > li {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr);
+  gap: 0 var(--s4);
   padding: var(--s4);
   border-top: 1px solid var(--line);
 }
@@ -1012,13 +1145,14 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 .metaline .gap { color: var(--line-3); }
 
 .metaline a {
-  color: inherit;
+  color: var(--brand-2);
+  font-weight: 600;
   text-decoration: underline;
-  text-decoration-color: var(--line-3);
+  text-decoration-color: var(--brand-line);
   text-underline-offset: 2px;
 }
 
-.metaline a:hover { color: var(--ink); text-decoration-color: var(--ink-3); }
+.metaline a:hover { text-decoration-color: currentColor; }
 
 .jobline { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
 .jobmeta { font-size: var(--t-small); color: var(--ink-2); }
@@ -1033,7 +1167,7 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 
 .picklist .jobpick {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
   gap: 0 var(--s3);
   align-items: center;
   width: 100%;
@@ -1183,7 +1317,7 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 
 .rows > li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
   gap: 0 var(--s4);
   padding: var(--s4);
   border-top: 1px solid var(--line);
@@ -1213,7 +1347,7 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 
 .rows .num small { display: block; font-size: var(--t-micro); color: var(--ink-3); }
 
-.under { grid-column: 1 / -1; }
+.under { grid-column: 2 / -1; }
 
 /* ================================ the week ============================= */
 
@@ -1226,7 +1360,7 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
 }
 
 .weekday { background: var(--surface); padding: var(--s3); min-height: 128px; }
-.weekday.is-today { background: var(--accent-soft); }
+.weekday.is-today { background: var(--brand-soft); }
 .weekday.weekend { background: var(--surface-2); }
 
 .weekday h4 { font-size: var(--t-body); font-weight: 650; }
@@ -1309,20 +1443,18 @@ body.crew .daybar button { min-height: 44px; min-width: 44px; }
   font-weight: 600;
 }
 
-/* Confirmation should register without becoming a coloured slab: the rule
-   down the side carries it, the words stay in ink. */
 .flash.good {
-  background: var(--surface-2);
-  color: var(--ink);
-  border-color: var(--line);
-  border-left: 2px solid var(--done);
+  background: var(--done-soft);
+  color: var(--brand-2);
+  border-color: var(--done-line);
+  border-left: 3px solid var(--done);
 }
 
 .flash.bad {
-  background: var(--surface-2);
-  color: var(--ink);
-  border-color: var(--line);
-  border-left: 2px solid var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: var(--danger-line);
+  border-left: 3px solid var(--danger);
 }
 .flash:empty { display: none; }
 

@@ -790,7 +790,7 @@ api('/api/me').then(function (r) {
   if (r.user.role === 'office') { location.replace('/office.html'); return; }
   view.me = r.user;
   document.getElementById('me').append(
-    make('span', { class: 'avatar', text: initialsOf(r.user.name) }),
+    make('span', { class: 'avatar ' + tintFor(r.user.name), text: initialsOf(r.user.name) }),
     make('span', { style: 'min-width:0' }, make('b', { text: r.user.name })));
   return load();
 }).catch(function (err) {

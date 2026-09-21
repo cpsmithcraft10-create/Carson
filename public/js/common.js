@@ -372,6 +372,17 @@ function watchBarHeight() {
 
 watchBarHeight();
 
+/**
+ * Which of the six people tints somebody gets. Picked from the name, so the
+ * same person is the same colour on every screen and in every list.
+ */
+function tintFor(name) {
+  var text = String(name || '');
+  var sum = 0;
+  for (var i = 0; i < text.length; i++) sum = (sum * 31 + text.charCodeAt(i)) >>> 0;
+  return 'w' + ((sum % 6) + 1);
+}
+
 /** Two letters for the little round avatar in the corner. */
 function initialsOf(name) {
   var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
