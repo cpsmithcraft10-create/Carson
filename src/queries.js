@@ -98,6 +98,8 @@ function shiftTotals(list) {
 function officeCounts(db) {
   return {
     waiting: db.prepare("SELECT COUNT(*) AS n FROM shifts WHERE status = 'sent'").get().n,
+    // Estimate requests off the website nobody has rung back yet.
+    new_estimates: db.prepare("SELECT COUNT(*) AS n FROM estimates WHERE state = 'new'").get().n,
     on_the_clock: db.prepare("SELECT COUNT(*) AS n FROM shifts WHERE status = 'open'").get().n,
     // Finished work that is not in QuickBooks yet, so the tab can say so.
     to_bill: db.prepare(`

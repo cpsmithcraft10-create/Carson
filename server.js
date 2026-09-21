@@ -9,6 +9,7 @@ const {
 
 const ROUTES = [
   ...require('./src/routes/auth'),
+  ...require('./src/routes/site'),
   ...require('./src/routes/crew'),
   ...require('./src/routes/office'),
 ].map((route) => ({

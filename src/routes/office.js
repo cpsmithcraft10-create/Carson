@@ -221,6 +221,80 @@ module.exports = [
     },
   },
 
+  /* ------------------------- estimate requests ------------------------ */
+
+  {
+    method: 'GET',
+    path: '/api/office/estimates',
+    handler({ db, query }) {
+      const state = v.oneOf(query.state, 'State', ['new', 'called', 'booked', 'closed', 'all'],
+        { required: false, fallback: 'all' });
+
+      const where = state === 'all' ? '' : 'WHERE e.state = ?';
+      const args = state === 'all' ? [] : [state];
+
+      const rows = db.prepare(`
+        SELECT e.*, c.name AS customer_name
+          FROM estimates e
+          LEFT JOIN customers c ON c.id = e.customer_id
+          ${where}
+         ORDER BY CASE e.state WHEN 'new' THEN 0 ELSE 1 END, e.id DESC
+      `).all(...args);
+
+      return {
+        estimates: rows.map((row) => ({
+          ...row,
+          work: row.work ? row.work.split(',') : [],
+        })),
+      };
+    },
+  },
+
+  {
+    method: 'PATCH',
+    path: '/api/office/estimates/:id',
+    handler({ db, params, body }) {
+      const id = v.id(params.id, 'Estimate');
+      const row = db.prepare('SELECT * FROM estimates WHERE id = ?').get(id);
+      if (!row) throw new HttpError(404, 'That request was not found');
+
+      const state = v.oneOf(body.state, 'State', ['new', 'called', 'booked', 'closed'],
+        { required: false, fallback: row.state });
+      const note = body.note === undefined
+        ? row.note
+        : v.text(body.note, 'Note', { max: 2000 }) || null;
+
+      db.prepare('UPDATE estimates SET state = ?, note = ? WHERE id = ?').run(state, note, id);
+      return { estimate: { ...row, state, note } };
+    },
+  },
+
+  {
+    /* They rang back, it is a real job, and now they want the address on
+       file without typing it in again. */
+    method: 'POST',
+    path: '/api/office/estimates/:id/customer',
+    handler({ db, params }) {
+      const id = v.id(params.id, 'Estimate');
+      const row = db.prepare('SELECT * FROM estimates WHERE id = ?').get(id);
+      if (!row) throw new HttpError(404, 'That request was not found');
+      if (row.customer_id) throw new HttpError(400, 'That one is already on the customer list');
+
+      const note = [row.detail, row.work ? `Asked about: ${row.work.split(',').join(', ')}` : '']
+        .filter(Boolean).join('\n\n');
+
+      const made = db.prepare(
+        'INSERT INTO customers (name, address, phone, notes) VALUES (?, ?, ?, ?)',
+      ).run(row.name, row.address, row.phone, note || null);
+
+      const customerId = Number(made.lastInsertRowid);
+      db.prepare("UPDATE estimates SET customer_id = ?, state = 'booked' WHERE id = ?")
+        .run(customerId, id);
+
+      return { customer_id: customerId };
+    },
+  },
+
   {
     method: 'GET',
     path: '/api/office/customers/:id',

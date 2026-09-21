@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<title>Custom Outdoor Design | Sprinklers, Landscape Lighting &amp; Drainage</title>
+<meta name="description" content="Sprinkler systems, landscape lighting and drainage, designed for your property and installed by the people who designed it. Free written estimates.">
+
+<!-- ================================================================
+     BEFORE THIS GOES LIVE — see site/README.md for the full list.
+     Everything still to be filled in is marked PLACEHOLDER below and
+     shows in the draft bar at the top of the page until you set
+     DRAFT to false in js/site.js.
+     ================================================================ -->
+
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png">
+<meta name="theme-color" content="#0A1411">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Custom Outdoor Design">
+<meta property="og:title" content="Custom Outdoor Design — sprinklers, lighting and drainage">
+<meta property="og:description" content="Green in July. Lit in October. Dry in April. Free written estimates.">
+<!-- PLACEHOLDER: once there is a domain, make this the full address,
+     e.g. https://customoutdoordesign.com/icons/icon-512.png -->
+<meta property="og:image" content="icons/icon-512.png">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400..600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+</head>
+
+<body>
+<a class="skip" href="#what">Skip to the main content</a>
+
+<!-- Removed by setting DRAFT to false in js/site.js. -->
+<div class="draftbar" id="draftbar" hidden></div>
+
+<header class="topbar" id="top">
+  <a class="mark" href="#top" aria-label="Custom Outdoor Design, back to top">
+    <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M16 4c4.6 5.4 7.6 9.4 7.6 13a7.6 7.6 0 0 1-15.2 0C8.4 13.4 11.4 9.4 16 4Z"
+            fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"/>
+      <path d="M16 12.6v7.6" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+      <path d="M12.9 15.7 16 12.6l3.1 3.1" fill="none" stroke="currentColor"
+            stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>
+      <b>Custom Outdoor Design</b>
+      <i>Sprinkler &middot; Lighting &middot; Drainage</i>
+    </span>
+  </a>
+
+  <nav class="nav" aria-label="Sections">
+    <a href="#what">What we do</a>
+    <a href="#work">Our work</a>
+    <a href="#about">About us</a>
+    <a href="#faq">FAQ</a>
+  </nav>
+
+  <div class="topcta">
+    <!-- PLACEHOLDER: phone number, here and everywhere else it appears. -->
+    <a class="phone" href="tel:+15550123456">(555) 012-3456</a>
+    <a class="btn btn-lamp" href="#estimate">Get an estimate</a>
+  </div>
+</header>
+
+<!-- ======================= dusk ======================= -->
+
+<section class="hero">
+  <div class="scene" aria-hidden="true">
+    <div class="sky"></div>
+    <canvas class="sparks" id="sparks"></canvas>
+
+    <svg class="ridge" viewBox="0 0 1200 220" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 150 L60 128 L96 140 L150 104 L196 128 L244 96 L300 124 L352 98 L404 126
+               L452 108 L512 136 L568 112 L628 138 L690 116 L744 142 L800 120 L860 146
+               L918 124 L980 150 L1040 130 L1100 152 L1160 134 L1200 150 L1200 220 L0 220 Z"/>
+    </svg>
+
+    <svg class="house" viewBox="0 0 420 240" aria-hidden="true">
+      <path d="M40 240 L40 120 L210 42 L380 120 L380 240 Z" class="solid"/>
+      <path d="M22 128 L210 42 L398 128" class="eave"/>
+      <rect class="win lit" x="78" y="150" width="46" height="40" rx="2"/>
+      <rect class="win lit" x="148" y="150" width="46" height="40" rx="2"/>
+      <rect class="win" x="296" y="150" width="46" height="40" rx="2"/>
+      <rect class="door" x="220" y="152" width="46" height="88" rx="2"/>
+      <rect class="win lit small" x="188" y="80" width="44" height="30" rx="2"/>
+    </svg>
+
+    <div class="uplight u1"></div>
+    <div class="uplight u2"></div>
+
+    <svg class="tree t1" viewBox="0 0 200 300" aria-hidden="true">
+      <path d="M100 300 L100 196 M100 214 L64 168 M100 232 L140 188 M100 186 L74 142 M100 176 L130 138"/>
+      <ellipse cx="100" cy="120" rx="72" ry="78"/>
+      <ellipse cx="66" cy="148" rx="42" ry="40"/>
+      <ellipse cx="136" cy="142" rx="46" ry="42"/>
+      <ellipse cx="108" cy="78" rx="44" ry="38"/>
+    </svg>
+    <svg class="tree t2" viewBox="0 0 200 300" aria-hidden="true">
+      <path d="M100 300 L100 210 M100 226 L70 186 M100 240 L134 202"/>
+      <ellipse cx="100" cy="142" rx="58" ry="64"/>
+      <ellipse cx="68" cy="166" rx="36" ry="34"/>
+      <ellipse cx="132" cy="162" rx="38" ry="34"/>
+    </svg>
+
+    <div class="lawn"></div>
+    <div class="pools"></div>
+
+    <ul class="pathlights">
+      <li style="--x:43%;--y:80%;--d:.10s"></li>
+      <li style="--x:55%;--y:84%;--d:.28s"></li>
+      <li style="--x:67%;--y:88%;--d:.46s"></li>
+      <li style="--x:80%;--y:93%;--d:.64s"></li>
+      <li style="--x:94%;--y:98%;--d:.82s"></li>
+    </ul>
+
+    <div class="grain"></div>
+    <div class="vignette"></div>
+  </div>
+
+  <div class="hero-copy">
+    <p class="eyebrow">
+      <!-- PLACEHOLDER: your town, and how long he has been at it. -->
+      Family owned &middot; Springfield and the towns around it &middot; Since 1998
+    </p>
+
+    <h1>Green in July.<br>Lit in October.<br>Dry in April.</h1>
+
+    <p class="lede">
+      Sprinkler systems, landscape lighting and drainage &mdash; designed for
+      your property, and installed by the same people who designed it.
+    </p>
+
+    <div class="herobtns">
+      <a class="btn btn-lamp btn-big" href="#estimate">Get a free estimate</a>
+      <a class="btn btn-ghost btn-big" href="tel:+15550123456">Call (555) 012-3456</a>
+    </div>
+
+    <p class="fineprint">
+      Written, itemised, no charge &mdash; usually within two days of walking
+      the property with you.
+    </p>
+  </div>
+
+  <dl class="spec-strip">
+    <div><dt>Irrigation</dt><dd>Head&#8209;to&#8209;head coverage</dd></div>
+    <div><dt>Lighting</dt><dd>12V low voltage &middot; 2700K</dd></div>
+    <div><dt>Drainage</dt><dd>4&Prime; perforated, socked</dd></div>
+  </dl>
+</section>
+
+<!-- ======================= night: what we do ======================= -->
+
+<section class="night" id="what">
+  <div class="wrap">
+    <p class="kicker">What we do</p>
+    <h2 class="display">Three trades that all come down to<br>where the water goes.</h2>
+    <p class="intro">
+      Most properties need two of these and nobody ever told them. A lawn that
+      will not hold green in August is usually a coverage problem, not a
+      watering problem. Water in a basement is almost always a grade problem
+      six feet outside it. We look at the whole property before we quote any
+      part of it.
+    </p>
+
+    <article class="trade">
+      <div class="trade-copy">
+        <h3>Sprinkler systems</h3>
+        <p class="promise">Installed, repaired, extended, and put to bed for the winter.</p>
+        <p>
+          We measure your static pressure and flow at the spigot before
+          anything is drawn, because that number decides how many heads can
+          run on a zone and nothing else does. Zones are laid out head to head
+          &mdash; every head throwing far enough to reach the next one &mdash;
+          so there is no dry crescent between them at the end of July. Rotors
+          for open turf, sprays for the tight beds, drip where a spray would
+          only wet the mulch and the siding.
+        </p>
+        <p>
+          We also take over other people&rsquo;s systems. Valve that will not
+          close, a zone that lost pressure, a controller nobody can programme,
+          heads buried by four seasons of topdressing &mdash; that is a normal
+          week.
+        </p>
+        <ul class="specs">
+          <li><span>Pressure</span> tested at the source, not assumed</li>
+          <li><span>Zones</span> matched precipitation within a zone</li>
+          <li><span>Backflow</span> installed and tested to code</li>
+          <li><span>Winter</span> blown out before the first hard freeze</li>
+        </ul>
+      </div>
+
+      <figure class="plan">
+        <svg viewBox="0 0 420 300" role="img" aria-label="A plan view of one sprinkler zone: a house, the lot line, lateral pipes and the overlapping spray arcs of eight heads.">
+          <g class="sheet">
+            <rect x="16" y="16" width="388" height="268" rx="2"/>
+            <path d="M16 262 H404" class="hair"/>
+          </g>
+
+          <g class="arcs">
+            <path d="M92 210 A56 56 0 0 1 148 154 L92 154 Z" transform="rotate(-90 92 210)"/>
+            <circle cx="168" cy="196" r="54"/>
+            <circle cx="248" cy="206" r="54"/>
+            <path d="M330 198 m-52 0 a52 52 0 1 0 104 0 Z"/>
+            <circle cx="132" cy="112" r="44"/>
+            <circle cx="214" cy="104" r="44"/>
+            <circle cx="296" cy="112" r="44"/>
+          </g>
+
+          <g class="built">
+            <rect x="150" y="38" width="128" height="58" rx="1" class="bldg"/>
+            <text x="214" y="72" class="lbl mid">HOUSE</text>
+            <path d="M52 236 H360" class="main"/>
+            <path d="M92 236 V210 M168 236 V196 M248 236 V206 M330 236 V198" class="lat"/>
+            <path d="M132 158 V112 M214 152 V104 M296 158 V112" class="lat"/>
+            <path d="M120 158 H308" class="lat"/>
+          </g>
+
+          <g class="heads">
+            <circle cx="92" cy="210" r="3.4"/><circle cx="168" cy="196" r="3.4"/>
+            <circle cx="248" cy="206" r="3.4"/><circle cx="330" cy="198" r="3.4"/>
+            <circle cx="132" cy="112" r="3.4"/><circle cx="214" cy="104" r="3.4"/>
+            <circle cx="296" cy="112" r="3.4"/>
+          </g>
+
+          <g class="dims">
+            <path d="M52 252 H360" class="dim"/>
+            <path d="M52 247 V257 M360 247 V257" class="dim"/>
+            <text x="206" y="245" class="lbl mid">LOT 86&prime;</text>
+            <text x="30" y="30" class="lbl">ZONE 3 OF 6</text>
+            <text x="390" y="30" class="lbl end">4.2 GPM &middot; 45 PSI</text>
+            <text x="30" y="278" class="lbl">ROTORS 5.5&Prime; POP&#8209;UP</text>
+            <text x="390" y="278" class="lbl end">HEAD TO HEAD</text>
+          </g>
+        </svg>
+        <figcaption>Zone plan &mdash; the drawing that comes with your estimate.</figcaption>
+      </figure>
+    </article>
+
+    <article class="trade flip">
+      <div class="trade-copy">
+        <h3>Landscape lighting</h3>
+        <p class="promise">The one thing you will notice every single night.</p>
+        <p>
+          All low voltage, all warm &mdash; 2700 Kelvin, the colour of a lamp
+          in a window, never the blue-white of a parking lot. Uplights at the
+          base of the good trees, a narrow beam on the chimney or a stone face,
+          soft wash across the front of the house, and only as much path
+          lighting as it takes to see the step. The fixtures are solid brass or
+          copper, because aluminium in a wet bed is a five-year fixture.
+        </p>
+        <p>
+          Before you spend anything we come back at dusk and set the fixtures
+          out on the lawn on temporary leads, so you stand in your own driveway
+          and look at the actual light on your actual house. Things get moved.
+          They always do.
+        </p>
+        <ul class="specs">
+          <li><span>Colour</span> 2700K, consistent fixture to fixture</li>
+          <li><span>Beams</span> 12&deg; to 60&deg;, chosen per tree</li>
+          <li><span>Control</span> astronomic timer, on at dusk year round</li>
+          <li><span>Metal</span> brass and copper, buried splices sealed</li>
+        </ul>
+      </div>
+
+      <figure class="plan">
+        <svg viewBox="0 0 420 300" role="img" aria-label="An elevation showing two uplights at the base of a tree, their beam spreads marked, and a path light with its pool of light.">
+          <g class="sheet">
+            <rect x="16" y="16" width="388" height="268" rx="2"/>
+            <path d="M16 244 H404" class="hair"/>
+          </g>
+
+          <g class="beams">
+            <path d="M138 240 L96 82 L196 82 Z"/>
+            <path d="M268 240 L228 104 L314 104 Z"/>
+            <path d="M348 240 L318 196 L378 196 Z" class="soft"/>
+          </g>
+
+          <g class="built">
+            <path d="M16 240 H404" class="grade"/>
+            <path d="M156 240 V150 M156 176 L124 142 M156 196 L192 158 M156 158 L134 128" class="trunk"/>
+            <ellipse cx="156" cy="104" rx="66" ry="60" class="canopy"/>
+            <path d="M262 240 V214" class="trunk"/>
+            <ellipse cx="262" cy="188" rx="34" ry="32" class="canopy"/>
+            <path d="M344 240 V216 M336 216 H352" class="trunk"/>
+          </g>
+
+          <g class="heads">
+            <circle cx="138" cy="240" r="3.4"/>
+            <circle cx="268" cy="240" r="3.4"/>
+            <circle cx="348" cy="240" r="3.4"/>
+          </g>
+
+          <g class="dims">
+            <path d="M96 74 H196" class="dim"/>
+            <path d="M96 69 V79 M196 69 V79" class="dim"/>
+            <text x="146" y="62" class="lbl mid">36&deg; SPREAD</text>
+            <text x="30" y="30" class="lbl">FRONT ELEVATION</text>
+            <text x="390" y="30" class="lbl end">2700K &middot; 12V</text>
+            <text x="30" y="270" class="lbl">3 FIXTURES &middot; 21W TOTAL</text>
+            <text x="390" y="270" class="lbl end">TRANSFORMER 150VA</text>
+          </g>
+        </svg>
+        <figcaption>Lighting plan &mdash; drawn before a single fixture is bought.</figcaption>
+      </figure>
+    </article>
+
+    <article class="trade">
+      <div class="trade-copy">
+        <h3>Drainage</h3>
+        <p class="promise">Water leaves the property. That is the whole job.</p>
+        <p>
+          A wet basement, a lawn that stays spongy a week after rain, mulch
+          washed across the driveway, a window well that fills &mdash; these
+          are the same problem wearing different clothes. We find where the
+          water is coming from and where the ground wants to send it, and then
+          we give it a better way out: a French drain in gravel with a sock on
+          the pipe, catch basins at the low points, downspouts tied in
+          underground instead of dumping at the wall, and the grade fixed so
+          the first six feet fall away from the house.
+        </p>
+        <p>
+          Everything runs to daylight where the fall allows it, and to a dry
+          well where it does not. No pipe of ours ends in a guess.
+        </p>
+        <ul class="specs">
+          <li><span>Fall</span> 1&#37; minimum, shot with a laser level</li>
+          <li><span>Pipe</span> 4&Prime; perforated in a filter sock</li>
+          <li><span>Stone</span> washed 3&frasl;4&Prime;, wrapped in fabric</li>
+          <li><span>Grade</span> 6&Prime; of fall in the first 10&prime;</li>
+        </ul>
+      </div>
+
+      <figure class="plan">
+        <svg viewBox="0 0 420 300" role="img" aria-label="A cross-section of a French drain: the trench, filter fabric, washed stone, the perforated pipe in its sock, and depth dimensions.">
+          <g class="sheet">
+            <rect x="16" y="16" width="388" height="268" rx="2"/>
+          </g>
+
+          <g class="ground">
+            <path d="M16 96 H150 L168 104 L268 104 L286 96 H404 V268 H16 Z" class="soil"/>
+            <path d="M16 96 H150 L168 104 L268 104 L286 96 H404" class="grade"/>
+            <path d="M168 104 V232 H268 V104" class="trench"/>
+            <rect x="168" y="104" width="100" height="128" class="stone"/>
+          </g>
+
+          <g class="pipe">
+            <circle cx="218" cy="200" r="24" class="sock"/>
+            <circle cx="218" cy="200" r="17"/>
+            <circle cx="218" cy="200" r="12" class="bore"/>
+            <path d="M206 190 h3 M228 190 h3 M201 202 h3 M233 202 h3" class="perf"/>
+          </g>
+
+          <g class="dims">
+            <path d="M136 104 V232" class="dim"/>
+            <path d="M131 104 H141 M131 232 H141" class="dim"/>
+            <text x="126" y="176" class="lbl end">18&Prime;&ndash;24&Prime;</text>
+            <path d="M300 96 L372 122" class="dim arrow"/>
+            <text x="392" y="140" class="lbl end">1&#37; FALL</text>
+            <text x="30" y="40" class="lbl">SECTION A&ndash;A</text>
+            <text x="390" y="40" class="lbl end">FRENCH DRAIN</text>
+            <text x="218" y="256" class="lbl mid">WASHED 3&frasl;4&Prime; STONE &middot; FABRIC WRAPPED</text>
+            <text x="30" y="278" class="lbl">4&Prime; PERF &middot; SOCK</text>
+            <text x="390" y="278" class="lbl end">TO DAYLIGHT</text>
+          </g>
+        </svg>
+        <figcaption>Drain section &mdash; what is actually going in the ground.</figcaption>
+      </figure>
+    </article>
+  </div>
+</section>
+
+<!-- ======================= night: the work ======================= -->
+
+<section class="night work" id="work">
+  <div class="wrap">
+    <p class="kicker">Our work</p>
+    <h2 class="display">Properties around town.</h2>
+    <p class="intro">
+      Six jobs, photographed the evening we finished them. Ask us for the
+      address of any one of them &mdash; we would rather you drove past and
+      looked at it yourself than took our word for it.
+    </p>
+
+    <!-- PLACEHOLDER: drop photos named 01.jpg ... 06.jpg into site/photos/
+         and they appear here automatically. Until then these read as empty
+         frames. See site/README.md. -->
+    <ol class="sheetstrip" id="contact-sheet">
+      <li>
+        <figure>
+          <div class="frame"><img alt="Front of a colonial at dusk with the facade washed and two maples uplit" data-photo="photos/01.jpg"></div>
+          <figcaption><span class="fr">01</span> Facade wash and two maples uplit &mdash; 14 fixtures</figcaption>
+        </figure>
+      </li>
+      <li>
+        <figure>
+          <div class="frame"><img alt="A new six zone sprinkler system on a corner lot" data-photo="photos/02.jpg"></div>
+          <figcaption><span class="fr">02</span> Six zones, corner lot, pulled in one day</figcaption>
+        </figure>
+      </li>
+      <li>
+        <figure>
+          <div class="frame"><img alt="A French drain trench open along the side of a house" data-photo="photos/03.jpg"></div>
+          <figcaption><span class="fr">03</span> 90&prime; of French drain, both downspouts tied in</figcaption>
+        </figure>
+      </li>
+      <li>
+        <figure>
+          <div class="frame"><img alt="A stone walkway lit by low path lights" data-photo="photos/04.jpg"></div>
+          <figcaption><span class="fr">04</span> Bluestone walk, nine path lights, no glare</figcaption>
+        </figure>
+      </li>
+      <li>
+        <figure>
+          <div class="frame"><img alt="A back lawn with sprinklers running at first light" data-photo="photos/05.jpg"></div>
+          <figcaption><span class="fr">05</span> Back lawn, rotors running the 5am cycle</figcaption>
+        </figure>
+      </li>
+      <li>
+        <figure>
+          <div class="frame"><img alt="A regraded side yard that used to hold water" data-photo="photos/06.jpg"></div>
+          <figcaption><span class="fr">06</span> Side yard regraded &mdash; held water for nine years</figcaption>
+        </figure>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ======================= first light ======================= -->
+
+<div class="dawn" aria-hidden="true"></div>
+
+<!-- ======================= day: about ======================= -->
+
+<section class="day" id="about">
+  <div class="wrap about">
+    <div class="about-copy">
+      <p class="kicker dark">About us</p>
+      <h2 class="display dark">We are the ones who show up.</h2>
+      <p class="big">
+        <!-- PLACEHOLDER: the real story. The shape below is the useful one:
+             who started it, when, why, and what has not changed. -->
+        Custom Outdoor Design has been putting water and light where they
+        belong on properties around Springfield since 1998. It started as one
+        man, one truck and a trencher, and it is still small on purpose.
+      </p>
+      <p>
+        The person who walks your property and works out what it needs is the
+        same person who is there when the trench is open, and the same person
+        who picks up the phone in March when a valve sticks. Nothing gets
+        handed off to a subcontractor you have never met and no crew shows up
+        without knowing the property.
+      </p>
+      <p>
+        We would rather talk you out of half of what you asked for than sell
+        you a system your water pressure cannot run. If two zones and a
+        regrade will fix it, we will tell you that, and the estimate will say
+        so in writing.
+      </p>
+
+      <dl class="facts">
+        <!-- PLACEHOLDER: every figure below. -->
+        <div><dt>Since</dt><dd>1998</dd></div>
+        <div><dt>Licensed</dt><dd>#000000</dd></div>
+        <div><dt>Insured</dt><dd>Fully</dd></div>
+        <div><dt>Warranty</dt><dd>Two years, parts and labour</dd></div>
+      </dl>
+    </div>
+
+    <figure class="portrait">
+      <div class="frame"><img alt="The owner of Custom Outdoor Design on a job" data-photo="photos/owner.jpg"></div>
+      <figcaption>
+        <!-- PLACEHOLDER: his name, and one true line about him. -->
+        Owner, Custom Outdoor Design. Twenty-seven springs and counting.
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ======================= day: how it works ======================= -->
+
+<section class="day tinted" id="how">
+  <div class="wrap">
+    <p class="kicker dark">How it works</p>
+    <h2 class="display dark">Four steps, and you can stop after any of them.</h2>
+
+    <ol class="steps">
+      <li>
+        <p class="n">Step one</p>
+        <h3>You tell us what is going wrong</h3>
+        <p>
+          A call or the form below. We ask a few questions &mdash; how big the
+          lot is, whether you are on town water or a well, where the water
+          sits after a storm &mdash; so we arrive already knowing something.
+        </p>
+      </li>
+      <li>
+        <p class="n">Step two</p>
+        <h3>We walk the property with you</h3>
+        <p>
+          Usually forty minutes. We test the pressure at the spigot, find the
+          low points, look at where the downspouts land. For lighting we come
+          back at dusk and set sample fixtures out on the lawn so you can see
+          it before you buy it.
+        </p>
+      </li>
+      <li>
+        <p class="n">Step three</p>
+        <h3>You get it in writing</h3>
+        <p>
+          An itemised estimate with the drawing attached &mdash; zones, heads,
+          fixtures, pipe, the lot. No charge and no pressure. Most people have
+          it within two days. Compare it with anyone else&rsquo;s; we would.
+        </p>
+      </li>
+      <li>
+        <p class="n">Step four</p>
+        <h3>We do the work and walk it with you</h3>
+        <p>
+          Most systems go in inside a day or two. At the end we walk the whole
+          thing with you, run every zone, show you the controller, and hand
+          you the as-built drawing of what is buried where.
+        </p>
+      </li>
+    </ol>
+
+    <p class="aside">
+      <b>Already have a system?</b> We repair and take over other
+      people&rsquo;s work &mdash; stuck valves, dead zones, a controller
+      nobody can programme, spring start-ups and winter blow-outs. Same
+      number, same people.
+    </p>
+  </div>
+</section>
+
+<!-- ======================= day: the estimate ======================= -->
+
+<section class="day estimate" id="estimate">
+  <div class="wrap est-grid">
+    <div class="est-copy">
+      <p class="kicker dark">Estimates</p>
+      <h2 class="display dark">Free, written,<br>and usually within two days.</h2>
+      <p>
+        Tell us roughly what is going on and we will call you back to arrange
+        a time to walk the property. Nothing is charged for and nothing is
+        owed until you say yes to a written number.
+      </p>
+
+      <ul class="ticks">
+        <li>No charge for the visit or the drawing</li>
+        <li>Itemised &mdash; you see what each part costs</li>
+        <li>An after-dark demo before any lighting job</li>
+        <li>The price on the paper is the price on the invoice</li>
+      </ul>
+
+      <p class="callnow">
+        In a hurry, or standing in water right now?
+        <a href="tel:+15550123456">Call (555) 012-3456</a>
+      </p>
+    </div>
+
+    <form class="est-form" id="estimate-form" novalidate>
+      <p class="formhead">Ask for an estimate</p>
+
+      <div class="row">
+        <div class="field">
+          <label for="f-name">Your name</label>
+          <input id="f-name" name="name" autocomplete="name" required>
+        </div>
+        <div class="field">
+          <label for="f-phone">Phone</label>
+          <input id="f-phone" name="phone" type="tel" inputmode="tel"
+                 autocomplete="tel" required>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="f-address">Property address</label>
+        <input id="f-address" name="address" autocomplete="street-address"
+               placeholder="Street, town" required>
+      </div>
+
+      <fieldset class="field">
+        <legend>What do you need? Tick everything that applies.</legend>
+        <div class="picks">
+          <label class="pick"><input type="checkbox" name="work" value="sprinkler"><span>Sprinklers</span></label>
+          <label class="pick"><input type="checkbox" name="work" value="lighting"><span>Lighting</span></label>
+          <label class="pick"><input type="checkbox" name="work" value="drainage"><span>Drainage</span></label>
+          <label class="pick"><input type="checkbox" name="work" value="repair"><span>A repair</span></label>
+          <label class="pick"><input type="checkbox" name="work" value="unsure"><span>Not sure yet</span></label>
+        </div>
+      </fieldset>
+
+      <div class="field">
+        <label for="f-detail">What is going on?</label>
+        <textarea id="f-detail" name="detail" rows="4"
+                  placeholder="The back corner never greens up. Water sits by the basement window after it rains."></textarea>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="f-when">Best time to reach you</label>
+          <select id="f-when" name="reach">
+            <option value="any">Any time</option>
+            <option value="morning">Mornings</option>
+            <option value="afternoon">Afternoons</option>
+            <option value="evening">After 5</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-email">Email <span class="opt">(optional)</span></label>
+          <input id="f-email" name="email" type="email" autocomplete="email">
+        </div>
+      </div>
+
+      <!-- Left empty by people, filled in by bots. -->
+      <div class="trap" aria-hidden="true">
+        <label for="f-fax">Fax</label>
+        <input id="f-fax" name="fax" tabindex="-1" autocomplete="off">
+      </div>
+
+      <button class="btn btn-green btn-big" type="submit" id="f-send">
+        Send it over
+      </button>
+
+      <p class="formnote" id="f-note" role="status">
+        We call back the same day, most days. We do not pass your details to
+        anybody.
+      </p>
+    </form>
+  </div>
+</section>
+
+<!-- ======================= day: faq ======================= -->
+
+<section class="day tinted" id="faq">
+  <div class="wrap faqwrap">
+    <p class="kicker dark">Questions</p>
+    <h2 class="display dark">The ones we get asked every week.</h2>
+
+    <div class="faqs">
+      <p class="faqgroup">Sprinklers</p>
+
+      <details name="faq">
+        <summary>What does a sprinkler system actually cost?</summary>
+        <div class="ans">
+          <p>
+            It comes down to zones, and zones come down to your water. We
+            measure the flow and pressure at the spigot; that tells us how
+            many heads can run at once, which sets how many zones the property
+            needs, which is most of the price. A small flat lot is a very
+            different number from an acre on a slope with a well.
+          </p>
+          <p>
+            That is why the estimate is free and in writing. Anybody who
+            quotes you a figure over the phone without asking about your water
+            is guessing, and you will meet the difference later as a change
+            order.
+          </p>
+        </div>
+      </details>
+
+      <details name="faq">
+        <summary>Are you going to tear up my lawn?</summary>
+        <div class="ans">
+          <p>
+            Far less than people expect. Pipe is pulled in with a vibratory
+            plough, which slices the turf rather than trenching it out, so
+            what you are left with is a seam you can walk on the same day.
+            It knits back over a few weeks. Trenching only happens where we
+            have to go under a drive or around roots we will not risk.
+          </p>
+        </div>
+      </details>
+
+      <details name="faq">
+        <summary>Do I need a backflow preventer, and does it need testing?</summary>
+        <div class="ans">
+          <p>
+            If your irrigation is fed off drinking water, yes &mdash; the
+            device keeps lawn water from being drawn back into the house
+            supply, and almost every town requires one. Many also require it
+            to be tested annually by a certified tester and the result filed.
+            We install it to code and handle the test.
+          </p>
+        </div>
+      </details>
+
+      <details name="faq">
+        <summary>When does it need winterising?</summary>
+        <div class="ans">
+          <p>
+            Before the first hard freeze &mdash; we start calling round in
+            October. Compressed air is run through each zone until the lines
+            are clear, because water left in a lateral splits the pipe and
+            cracks the heads, and you find out in April. Spring start-up is
+            the reverse: pressure back up slowly, every head checked and
+            adjusted.
+          </p>
+        </div>
+      </details>
+
+      <p class="faqgroup">Lighting</p>
+
+      <details name="faq">
+        <summary>Can I see it before I commit to it?</summary>
+        <div class="ans">
+          <p>
+            Yes, and we would rather you did. We come back at dusk with
+            fixtures on temporary leads and set them out on the lawn, and you
+            stand in your own driveway and look at your own house lit up.
+            Beams get swapped, fixtures get moved back a foot. It costs you
+            nothing and it is the difference between lighting you like and
+            lighting you paid for.
+          </p>
+        </div>
+      </details>
+
+      <details name="faq">
+        <summary>How long do the fixtures last, and what does it cost to run?</summary>
+        <div class="ans">
+          <p>
+            LED lamps run tens of thousands of hours, so most people never
+            touch them. The fixture itself is what fails, which is why we use
+            solid brass and copper &mdash; they weather to a finish instead of
+            corroding through like cast aluminium does in a wet bed.
+          </p>
+          <p>
+            Running cost is small. A typical front-of-house job is fifteen to
+            twenty-five fixtures at two to four watts each &mdash; less than
+            one old bulb in your porch light, running from dusk to dawn.
+          </p>
+        </div>
+      </details>
+
+      <p class="faqgroup">Drainage</p>
+
+      <details name="faq">
+        <summary>Water gets into my basement. Can you fix it from outside?</summary>
+        <div class="ans">
+          <p>
+            Usually, and outside is where you should start. Most wet
+            basements are not a foundation problem; they are roof water and
+            grade. Downspouts dumping a few feet from the wall put hundreds of
+            gallons against it in one storm, and ground that has settled back
+            towards the house walks it straight down.
+          </p>
+          <p>
+            We tie the downspouts in underground, cut the grade so the first
+            ten feet fall away, and add a French drain where the soil holds
+            water. That fixes most of them. If it does not, you need somebody
+            inside, and we will tell you that rather than sell you a trench.
+          </p>
+        </div>
+      </details>
+
+      <details name="faq">
+        <summary>Where does the water actually end up?</summary>
+        <div class="ans">
+          <p>
+            To daylight wherever the property has the fall for it &mdash; the
+            pipe surfaces somewhere lower and open, and gravity does all of
+            it, with nothing to maintain. Where there is no fall, it goes to a
+            dry well sized for the roof area feeding it. What we will not do
+            is run it to your property line and make it the neighbour&rsquo;s
+            problem.
+          </p>
+        </div>
+      </details>
+
+      <p class="faqgroup">Working with us</p>
+
+      <details name="faq">
+        <summary>How soon can you come out?</summary>
+        <div class="ans">
+          <p>
+            <!-- PLACEHOLDER: real lead times. -->
+            A few days for a walk-through most of the year. March through May
+            is the busiest stretch &mdash; everybody wants their system back
+            on the same week &mdash; so a spring job is worth booking early.
+            Broken mains and a yard filling with water get seen the same day.
+          </p>
+        </div>
+      </details>
+
+      <details name="faq">
+        <summary>Do you work on systems somebody else put in?</summary>
+        <div class="ans">
+          <p>
+            All the time. Repairs, taking over service, adding zones to a
+            system that was undersized, replacing a controller with something
+            you can actually use from your phone. We do not need to have
+            installed it to look after it.
+          </p>
+        </div>
+      </details>
+
+      <details name="faq">
+        <summary>What is covered if something goes wrong?</summary>
+        <div class="ans">
+          <p>
+            <!-- PLACEHOLDER: the real warranty terms. -->
+            Two years on parts and labour for anything we install, on top of
+            the manufacturer&rsquo;s cover on fixtures and controllers. If a
+            head we set is throwing wrong next season, that is ours to put
+            right.
+          </p>
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= back to dusk ======================= -->
+
+<footer class="footer">
+  <div class="wrap foot-grid">
+    <div class="foot-mark">
+      <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 4c4.6 5.4 7.6 9.4 7.6 13a7.6 7.6 0 0 1-15.2 0C8.4 13.4 11.4 9.4 16 4Z"
+              fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"/>
+        <path d="M16 12.6v7.6" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+        <path d="M12.9 15.7 16 12.6l3.1 3.1" fill="none" stroke="currentColor"
+              stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <p class="fname">Custom Outdoor Design</p>
+      <p class="ftag">Sprinkler systems, landscape lighting and drainage.</p>
+    </div>
+
+    <div class="foot-col">
+      <h4>Get in touch</h4>
+      <!-- PLACEHOLDER: phone, email, hours. -->
+      <p><a href="tel:+15550123456">(555) 012-3456</a></p>
+      <p><a href="mailto:office@example.com">office@example.com</a></p>
+      <p class="quiet">Monday to Friday, 7am&ndash;5pm<br>Saturdays in spring</p>
+    </div>
+
+    <div class="foot-col">
+      <h4>Where we work</h4>
+      <!-- PLACEHOLDER: the real towns. These matter for being found on a map. -->
+      <p class="quiet">
+        Springfield, Rivermill, Oakvale, Stanton, Bell Harbour, Weston Green
+        and the towns between them. Not sure if that is you? Ask.
+      </p>
+    </div>
+
+    <div class="foot-col">
+      <h4>Estimates</h4>
+      <p><a href="#estimate">Ask for one</a></p>
+      <p><a href="#faq">Common questions</a></p>
+      <p><a href="#how">How it works</a></p>
+    </div>
+  </div>
+
+  <div class="wrap foot-rule">
+    <p>&copy; <span id="year">2026</span> Custom Outdoor Design &middot; Licensed &amp; insured &middot; Lic. #000000</p>
+    <p><a class="crewlink" href="/">Crew &amp; office sign in</a></p>
+  </div>
+</footer>
+
+<!-- The thing that wins jobs on a phone: always reachable, never in the way. -->
+<div class="thumbbar" aria-label="Contact">
+  <a class="tb-call" href="tel:+15550123456">Call us</a>
+  <a class="tb-est" href="#estimate">Get an estimate</a>
+</div>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "LocalBusiness",
+  "name": "Custom Outdoor Design",
+  "description": "Sprinkler systems, landscape lighting and drainage installation, repair and service.",
+  "telephone": "+1-555-012-3456",
+  "email": "office@example.com",
+  "priceRange": "$$",
+  "areaServed": ["Springfield", "Rivermill", "Oakvale", "Stanton", "Bell Harbour", "Weston Green"],
+  "knowsAbout": ["Irrigation", "Landscape lighting", "Drainage", "French drains", "Backflow testing"],
+  "openingHoursSpecification": [{
+    "@type": "OpeningHoursSpecification",
+    "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+    "opens": "07:00",
+    "closes": "17:00"
+  }]
+}
+</script>
+
+<script src="js/site.js"></script>
+</body>
+</html>

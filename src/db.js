@@ -29,6 +29,27 @@ CREATE TABLE IF NOT EXISTS customers (
 
 CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
 
+-- Estimate requests off the public website. Nothing here is trusted and
+-- nothing here is a customer yet — the office reads them, calls back, and
+-- turns the real ones into customers.
+CREATE TABLE IF NOT EXISTS estimates (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT    NOT NULL,
+  phone      TEXT    NOT NULL,
+  address    TEXT    NOT NULL,
+  email      TEXT,
+  work       TEXT,
+  detail     TEXT,
+  reach      TEXT    NOT NULL DEFAULT 'any',
+  state      TEXT    NOT NULL DEFAULT 'new'
+                     CHECK (state IN ('new', 'called', 'booked', 'closed')),
+  note       TEXT,
+  customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+  created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_estimates_state ON estimates(state);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   job_date     TEXT    NOT NULL,

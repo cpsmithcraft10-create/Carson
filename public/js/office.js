@@ -3,7 +3,7 @@
 /* The office screen. Hand out work, keep an eye on the day, OK hours, post
    announcements, run payroll. */
 
-var TABS = ['today', 'week', 'hours', 'jobs', 'customers', 'billing', 'notices', 'crew', 'pay'];
+var TABS = ['today', 'week', 'hours', 'leads', 'jobs', 'customers', 'billing', 'notices', 'crew', 'pay'];
 
 var view = {
   me: null,
@@ -39,6 +39,7 @@ function fetchTab() {
   if (view.tab === 'today') return api('/api/office/day?date=' + view.day);
   if (view.tab === 'week') return api('/api/office/week?from=' + view.weekFrom);
   if (view.tab === 'hours') return api('/api/office/waiting');
+  if (view.tab === 'leads') return api('/api/office/estimates');
   if (view.tab === 'jobs') {
     return api('/api/office/jobs?from=' + view.day + '&to=' + shiftDate(view.day, 13));
   }
@@ -89,6 +90,7 @@ function paintCounts(counts) {
 
   badge('pip-hours', counts.waiting);
   badge('pip-billing', counts.to_bill);
+  badge('pip-leads', counts.new_estimates);
 }
 
 /* The job form and the payroll picker need the crew even on screens that do
@@ -180,6 +182,7 @@ function paint() {
     today: paintToday,
     week: paintWeek,
     hours: paintHours,
+    leads: paintLeads,
     jobs: paintJobs,
     customers: paintCustomers,
     billing: paintBilling,
@@ -1206,6 +1209,122 @@ function jobForm(job) {
 }
 
 /* --------------------------- announcements ------------------------ */
+
+/* --------------------------- estimate requests -------------------------- */
+
+/* What comes off the website. It is a call-back list and nothing more:
+   the only thing that matters on this screen is that nobody sits in the
+   "new" column overnight. */
+
+var LEAD_WORDS = {
+  sprinkler: 'Sprinklers', lighting: 'Lighting', drainage: 'Drainage',
+  repair: 'A repair', unsure: 'Not sure yet',
+};
+
+var REACH_WORDS = {
+  any: 'any time', morning: 'mornings', afternoon: 'afternoons', evening: 'after 5',
+};
+
+var LEAD_STATE = {
+  new: { word: 'Not called yet', pill: 'question' },
+  called: { word: 'Called', pill: 'sent' },
+  booked: { word: 'Booked in', pill: 'ok' },
+  closed: { word: 'Closed', pill: 'sent' },
+};
+
+function markLead(lead, state, message) {
+  then(api('/api/office/estimates/' + lead.id, { method: 'PATCH', body: { state: state } }), message);
+}
+
+function leadRow(lead) {
+  var state = LEAD_STATE[lead.state] || LEAD_STATE.new;
+  var wants = (lead.work || []).map(function (w) { return LEAD_WORDS[w] || w; });
+
+  var acts = make('div', { class: 'acts' });
+
+  if (lead.state === 'new') {
+    acts.appendChild(make('button', { class: 'lead',
+      onclick: function () { markLead(lead, 'called', 'Marked as called.'); } }, 'I called them'));
+  }
+
+  if (lead.state !== 'booked' && !lead.customer_id) {
+    acts.appendChild(make('button', {
+      onclick: function () {
+        then(api('/api/office/estimates/' + lead.id + '/customer', { method: 'POST' }),
+          lead.name + ' is on the customer list.');
+      },
+    }, 'Add to customers'));
+  }
+
+  if (lead.state !== 'closed') {
+    acts.appendChild(make('button', { class: 'risky',
+      onclick: function () { markLead(lead, 'closed', 'Closed.'); } }, 'Nothing came of it'));
+  } else {
+    acts.appendChild(make('button', {
+      onclick: function () { markLead(lead, 'new', 'Back on the list.'); } }, 'Put it back'));
+  }
+
+  var phone = String(lead.phone || '').replace(/[^\d+]/g, '');
+
+  return make('li', {},
+    make('div', { class: 'headline' },
+      make('h3', { text: lead.name }),
+      make('span', { class: 'state ' + state.pill, text: state.word })),
+
+    make('div', { class: 'metaline' },
+      phone
+        ? make('a', { href: 'tel:' + phone, text: lead.phone })
+        : make('span', { text: lead.phone }),
+      make('span', { class: 'gap', text: '·' }),
+      lead.address
+        ? make('a', {
+            href: 'https://maps.google.com/?q=' + encodeURIComponent(lead.address),
+            target: '_blank', rel: 'noopener', text: lead.address })
+        : make('span', { text: 'no address given' }),
+      make('span', { class: 'gap', text: '·' }),
+      make('span', { text: 'best reached ' + (REACH_WORDS[lead.reach] || 'any time') }),
+      make('span', { class: 'gap', text: '·' }),
+      make('span', { text: agoWords(lead.created_at) })),
+
+    wants.length ? make('div', { class: 'jobdetail', text: 'Asked about: ' + wants.join(', ') }) : null,
+    lead.detail ? make('p', { class: 'needdoing', text: lead.detail }) : null,
+    lead.email ? make('div', { class: 'mates' }, make('a', { href: 'mailto:' + lead.email, text: lead.email })) : null,
+    lead.customer_name ? make('div', { class: 'mates', text: 'On the customer list as ' + lead.customer_name }) : null,
+    acts);
+}
+
+function paintLeads(sheet) {
+  var all = view.data.estimates || [];
+  var fresh = all.filter(function (l) { return l.state === 'new'; });
+  var rest = all.filter(function (l) { return l.state !== 'new'; });
+
+  if (!all.length) {
+    sheet.appendChild(panel('Estimate requests', [], make('div', { class: 'pad' },
+      make('p', { class: 'none',
+        text: 'Nothing has come in off the website yet. Requests land here the '
+          + 'moment somebody sends the form.' }))));
+    return;
+  }
+
+  if (fresh.length) {
+    sheet.appendChild(make('div', { class: 'needsyou' },
+      make('b', { text: fresh.length === 1
+        ? 'One person is waiting on a call back'
+        : fresh.length + ' people are waiting on a call back' })));
+  }
+
+  sheet.appendChild(panel('Waiting on a call',
+    fresh.length ? [make('span', { class: 'pip', text: String(fresh.length) })] : [],
+    fresh.length
+      ? make('ul', { class: 'jobs' }, fresh.map(leadRow))
+      : make('div', { class: 'pad' }, make('p', { class: 'none', text: 'Everybody has been rung back.' }))));
+
+  if (rest.length) {
+    sheet.appendChild(panel('Already dealt with',
+      [make('span', { class: 'pip', text: String(rest.length) })],
+      make('ul', { class: 'jobs' }, rest.map(leadRow))));
+  }
+}
 
 function paintNotices(sheet) {
   var title = make('input', { id: 'note-title', maxlength: '120',

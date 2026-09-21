@@ -283,13 +283,27 @@ Two things make that work, both of them in `public/`:
 happens over plain HTTP — phones refuse both. `http://localhost` is the one
 exception, which is how you try it on the machine you are developing on.
 
+## The website
+
+`site/` is the public side: what the work looks like, who does it, and the
+form that brings a job in. Plain HTML and CSS, no build step — open
+`site/index.html` in a browser and that is the site.
+
+Estimate requests from that form post to `/api/estimate` and land in the
+office screen under **Estimates**, with a count on the tab until somebody has
+rung back and a button to put them straight on the customer list.
+
+Everything still to be filled in — phone, town, licence number, photographs —
+is listed across the top of the page until you turn the draft flag off.
+`site/README.md` has the checklist and how to put it online.
+
 ## Tests
 
 ```bash
 npm test
 ```
 
-93 tests covering the hours arithmetic (breaks, work past midnight, rounding),
+99 tests covering the hours arithmetic (breaks, work past midnight, rounding),
 a whole day from giving out a job through to payroll, two people on one job,
 work that was never on a list, announcements and who read them, a job running
 over two days, customers and their history, putting a job out again week after
@@ -302,6 +316,11 @@ customer list in, cannot reach billing or the QuickBooks keys, and cannot
 change hours already OK'd. Four more check what a phone needs before it will
 put this on a home screen: the manifest, the icons it names, the tags on every
 screen, and that the service worker caches no part of the office's own work.
+Six more follow a request off the website all the way through: a stranger
+sends the form, it reaches the office and nobody else, they ring back and it
+becomes a customer, and the things that should not get in — no callback
+number, a bot filling every field, the same number sent over and over — do
+not.
 
 The billing half of that runs the whole send-an-invoice path against a
 QuickBooks that lives in a variable: the invoice body Intuit is handed, the
@@ -322,7 +341,7 @@ src/settings.js      office settings, including the QuickBooks connection
 src/billing.js       working out what a finished job should bill
 src/quickbooks.js    every URL and body shape QuickBooks Online expects
 src/invoicing.js     a finished job, all the way to an invoice
-src/routes/          sign-in, crew and office endpoints
+src/routes/          sign-in, website, crew and office endpoints
 public/index.html    sign in
 public/crew.html     the crew screen
 public/office.html   the office screen
@@ -330,6 +349,7 @@ public/install.html  the page the crew are sent to put it on their phone
 public/app.webmanifest  what makes it an app on a phone
 public/sw.js         keeps the screens on the handset; never the work
 public/icons/        the home-screen icons
+site/                the public website — see site/README.md
 scripts/setup.js     makes the first office account
 scripts/sample.js    loads sample data
 scripts/icons.js     draws the home-screen icons from the house mark
