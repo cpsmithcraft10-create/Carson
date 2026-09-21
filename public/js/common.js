@@ -355,11 +355,14 @@ function logoMark(size) {
 /* The tab bar is one row for the crew and two for the office. Measure it so
    the page ends above it instead of behind it. */
 function watchBarHeight() {
-  var bar = document.querySelector('.tabs');
+  // On a phone the rail is the bar across the bottom; the sheet has to end
+  // above it rather than behind it.
+  var bar = document.querySelector('.rail');
   if (!bar) return;
 
   var settle = function () {
-    document.documentElement.style.setProperty('--barh', bar.offsetHeight + 'px');
+    var fixed = getComputedStyle(bar).position === 'fixed';
+    document.documentElement.style.setProperty('--barh', fixed ? bar.offsetHeight + 'px' : '0px');
   };
 
   settle();
@@ -368,3 +371,11 @@ function watchBarHeight() {
 }
 
 watchBarHeight();
+
+/** Two letters for the little round avatar in the corner. */
+function initialsOf(name) {
+  var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}

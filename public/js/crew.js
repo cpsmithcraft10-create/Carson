@@ -91,10 +91,14 @@ function openJob(id) {
 
 /* ----------------------------- painting --------------------------- */
 
+var SCREENS = { jobs: 'My day', hours: 'My hours', notices: 'From the office', me: 'Me' };
+
 function paint() {
   TABS.forEach(function (t) {
     document.getElementById('tab-' + t).setAttribute('aria-selected', String(t === view.tab));
   });
+
+  document.getElementById('screen').textContent = SCREENS[view.tab] || 'My day';
 
   var pip = document.getElementById('unread-pip');
   pip.className = view.unread ? 'pipdot' : '';
@@ -675,10 +679,8 @@ function paintMe(sheet) {
 /* ------------------------------- start ---------------------------- */
 
 document.getElementById('badge').append(
-  logoMark(30),
-  make('span', {},
-    make('b', { text: 'Custom Outdoor Design' }),
-    make('i', { text: 'Sprinkler · Lighting · Drainage' })));
+  make('b', { text: 'Custom Outdoor Design' }),
+  make('i', { text: 'Sprinkler · Lighting · Drainage' }));
 
 TABS.forEach(function (t) {
   document.getElementById('tab-' + t).addEventListener('click', function () { goTab(t); });
@@ -695,7 +697,9 @@ setInterval(function () {
 api('/api/me').then(function (r) {
   if (r.user.role === 'office') { location.replace('/office.html'); return; }
   view.me = r.user;
-  document.getElementById('me').textContent = r.user.name;
+  document.getElementById('me').append(
+    make('span', { class: 'avatar', text: initialsOf(r.user.name) }),
+    make('span', { style: 'min-width:0' }, make('b', { text: r.user.name })));
   return load();
 }).catch(function (err) {
   document.getElementById('sheet').textContent = err.message;

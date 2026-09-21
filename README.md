@@ -156,8 +156,22 @@ The company name sits in the three page files (`public/index.html`,
 `public/crew.html`, `public/office.html`) and in the two page scripts — search
 for `Custom Outdoor Design`.
 
-The pages ask Google Fonts for Bitter and Archivo. With no signal they fall back
-to fonts already on the phone and everything still works.
+There are no web fonts and nothing else loaded from the internet — an office
+on a bad connection gets the real thing, not a fallback. Colour, type and
+spacing all come from the tokens at the top of `public/css/app.css`; change
+`--accent` there and the whole app follows.
+
+## Two screens, one design
+
+The office runs on a desk all day, so it gets the layout that suits that: a
+rail down the left that is always there, dense tables with the figures
+aligned, small type, hairline rules, and row actions that stay quiet until
+you reach for them.
+
+The crew run on a phone, outdoors, often with gloves on. Same palette, same
+components, same everything — set a size larger, spaced further apart, with
+a bar across the bottom your thumb reaches and buttons you cannot miss. It is
+not a different product, it is this one turned up.
 
 ## Putting it where the crew can reach it
 

@@ -121,11 +121,24 @@ function goTab(tab) {
   load();
 }
 
+/** The rail says where you can go; the header says where you are. */
+function nameScreen() {
+  var head = document.getElementById('screen');
+  if (!head) return;
+
+  if (view.hunting) { head.textContent = 'Search'; return; }
+
+  var label = document.querySelector('#tab-' + view.tab + ' span');
+  head.textContent = label ? label.textContent : 'Today';
+}
+
 function markTab() {
   TABS.forEach(function (t) {
     document.getElementById('tab-' + t)
       .setAttribute('aria-selected', String(!view.hunting && t === view.tab));
   });
+
+  nameScreen();
 }
 
 /* ----------------------------- painting --------------------------- */
@@ -1178,10 +1191,8 @@ function paintPay(sheet) {
 /* ------------------------------- start ---------------------------- */
 
 document.getElementById('badge').append(
-  logoMark(30),
-  make('span', {},
-    make('b', { text: 'Custom Outdoor Design' }),
-    make('i', { text: 'Office' })));
+  make('b', { text: 'Custom Outdoor Design' }),
+  make('i', { text: 'Office' }));
 
 TABS.forEach(function (t) {
   document.getElementById('tab-' + t).addEventListener('click', function () { goTab(t); });
@@ -1212,7 +1223,11 @@ document.getElementById('signout').appendChild(signOutButton());
 api('/api/me').then(function (r) {
   if (r.user.role !== 'office') { location.replace('/crew.html'); return; }
   view.me = r.user;
-  document.getElementById('me').textContent = r.user.name;
+  document.getElementById('me').append(
+    make('span', { class: 'avatar', text: initialsOf(r.user.name) }),
+    make('span', { style: 'min-width:0' },
+      make('b', { text: r.user.name }),
+      make('i', { text: 'Office' })));
   return load();
 }).catch(function (err) {
   document.getElementById('sheet').textContent = err.message;
