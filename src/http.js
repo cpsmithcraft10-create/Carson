@@ -4,7 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const MAX_BODY = 256 * 1024;
+// Big enough for a customer list pasted out of the accounts; nothing else
+// this app receives comes close.
+const MAX_BODY = 2 * 1024 * 1024;
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',

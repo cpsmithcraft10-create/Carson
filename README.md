@@ -76,7 +76,8 @@ They can also:
   week for as many weeks as the season runs.
 - **Customers** — everybody worked for, with their address, phone, notes for
   next time (gate code, dog, where the controller is), how many jobs they have
-  had and when the last one was. Open one for its whole history.
+  had and when the last one was. Open one for its whole history. A list you
+  already have **comes in whole** — see below.
 - **Search** — one box across customers and jobs: a name, a street, a part
   fitted, anything written in the notes.
 - **Announcements** — put something out to everybody, mark it important so it
@@ -87,6 +88,34 @@ They can also:
   **anything over 40 hours flagged**, a day-by-day breakdown, a roll-up of
   every part used over the period for billing, and a CSV for whoever does the
   books.
+
+## Bringing the customers you already have
+
+Nobody is retyping four hundred customers. Whatever holds them now will hand
+over a CSV: QuickBooks, Jobber, ServiceTitan, Excel, Google Sheets, the
+contacts on a phone. On **Customers**, hit *Bring a list in* and either pick
+the file you exported or paste the rows straight out of the spreadsheet.
+
+- **Headings are worked out for you.** Name, Customer, Client, Company and
+  Display Name all mean the name; Address, Street, Service Address and Bill To
+  Street all mean where. A file with no heading row at all is read in the
+  order anyone would write it: name, address, phone, notes — and it says so,
+  so you can check it landed the right way round.
+- **An address split over columns is put back together.** The accounts keep
+  street, city, state and zip apart; a job sheet wants one line.
+- **You see what will happen before it happens.** How many will be added, how
+  many are already on the books, which rows were skipped and why — then you
+  decide. Nothing is written until you do.
+- **Running the same list twice is safe.** Matching is by name, ignoring case
+  and extra spaces, so a second run adds nobody twice. The same name twice in
+  one file goes in once.
+- **Blanks get filled, notes never get overwritten.** Ask it to fill blanks and
+  it fills only what is empty. A gate code somebody wrote after standing at the
+  gate is not replaced by whatever the export had in that column.
+- It goes in all at once or not at all, so a list never ends up half in.
+
+Straight after, those customers are in the drop-down on **Give out work** —
+pick one and the address and phone fill themselves in.
 
 ## Things worth knowing
 
@@ -148,13 +177,16 @@ Back up `data/custom-outdoor.db` — that one file is every hour anybody worked.
 npm test
 ```
 
-44 tests covering the hours arithmetic (breaks, work past midnight, rounding),
+61 tests covering the hours arithmetic (breaks, work past midnight, rounding),
 a whole day from giving out a job through to payroll, two people on one job,
 work that was never on a list, announcements and who read them, a job running
 over two days, customers and their history, putting a job out again week after
-week, searching, over-40 flagging and the parts roll-up, and the boundaries:
-the crew cannot reach the office side, cannot log against somebody else's job,
-and cannot change hours already OK'd.
+week, searching, over-40 flagging and the parts roll-up, reading a customer
+list out of a messy export (quoted commas, tabs, a split address, no heading
+row, a byte-order mark) and bringing it in twice without doubling anybody up
+or writing over a note somebody left, and the boundaries: the crew cannot
+reach the office side, cannot log against somebody else's job, cannot bring a
+customer list in, and cannot change hours already OK'd.
 
 ## Layout
 
@@ -165,6 +197,7 @@ src/auth.js          sign-in numbers and sessions
 src/time.js          date and time arithmetic
 src/validate.js      checking what comes in
 src/queries.js       shared job and shift queries
+src/import.js        reading a customer list out of a CSV or a paste
 src/routes/          sign-in, crew and office endpoints
 public/index.html    sign in
 public/crew.html     the crew screen

@@ -16,6 +16,10 @@ var view = {
   people: [],
   customers: [],
   openCustomer: null,
+  bringingIn: false,  // the customer-list import panel is open
+  bringText: '',      // kept here so a repaint does not lose the paste
+  bringFill: 'skip',  // and so the preview and the run agree about matches
+  looked: null,       // what a look-first run said would happen
   copying: null,
   hunting: null,      // a search term, which takes over the sheet
   data: {},
@@ -103,6 +107,10 @@ function goTab(tab) {
   view.flash = null;
   view.editingJob = null;
   view.openCustomer = null;
+  view.bringingIn = false;
+  view.bringText = '';
+  view.bringFill = 'skip';
+  view.looked = null;
   view.copying = null;
   view.hunting = null;
 
@@ -218,6 +226,7 @@ function paintCustomers(sheet) {
   var list = view.data.customers || [];
 
   sheet.appendChild(newCustomerForm());
+  sheet.appendChild(bringInForm());
 
   sheet.appendChild(panel('Customers',
     list.length ? [make('span', { class: 'pip', text: String(list.length) })] : [],
@@ -277,6 +286,185 @@ function newCustomerForm() {
         }), 'On the books. You can book them a job now.');
       },
     }, 'Add them')));
+}
+
+/**
+ * Bringing a list in from wherever the customers live now. Everything that
+ * holds them — the accounts, a spreadsheet, the contacts on a phone — will
+ * save a CSV, and a spreadsheet pasted straight in arrives as tab-separated
+ * text. Both go in the same box.
+ */
+function bringInForm() {
+  if (!view.bringingIn) {
+    return panel('Already have a customer list?', [], make('div', { class: 'pad' },
+      make('p', { class: 'none', style: 'margin-bottom:4px',
+        text: 'Bring it in from the accounts, a spreadsheet or the phone instead of '
+          + 'typing it all out again.' }),
+      make('button', { class: 'slim', style: 'width:auto',
+        onclick: function () { view.bringingIn = true; view.looked = null; paint(); } },
+        'Bring a list in')));
+  }
+
+  var box = make('textarea', {
+    id: 'bring-text',
+    style: 'min-height:150px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px',
+    placeholder: 'Name,Address,Phone,Notes\nWeaver residence,1420 Oak Hollow Dr,555-0142,Gate code 4471',
+    oninput: function (e) { view.bringText = e.target.value; view.looked = null; },
+  });
+
+  box.value = view.bringText;
+
+  var file = make('input', {
+    type: 'file', id: 'bring-file', accept: '.csv,.tsv,.txt,text/csv,text/plain',
+    style: 'padding:9px 12px',
+    onchange: function (e) {
+      var picked = e.target.files && e.target.files[0];
+      if (!picked) return;
+
+      var reader = new FileReader();
+      reader.onload = function () {
+        view.bringText = String(reader.result || '');
+        box.value = view.bringText;
+        view.looked = null;
+        say('Read ' + picked.name + '. Have a look at what it found, then bring it in.');
+      };
+      reader.onerror = function () { say('That file could not be read.', 'bad'); };
+      reader.readAsText(picked);
+    },
+  });
+
+  var fill = make('select', {
+    id: 'bring-fill',
+    onchange: function (e) { view.bringFill = e.target.value; view.looked = null; paint(); },
+  },
+    make('option', { value: 'skip' }, 'Leave anybody already on the books alone'),
+    make('option', { value: 'update' }, 'Fill in blanks on anybody already on the books'));
+
+  fill.value = view.bringFill;
+
+  var send = function (lookFirst) {
+    var text = (view.bringText || '').trim();
+    if (!text) { say('Paste the list in, or pick a file.', 'bad'); return; }
+
+    api('/api/office/customers/import', {
+      method: 'POST',
+      body: { text: text, on_match: view.bringFill, look_first: lookFirst },
+    }).then(function (out) {
+      if (lookFirst) {
+        view.looked = out;
+        view.flash = null;
+        paint();
+        return null;
+      }
+
+      view.bringingIn = false;
+      view.bringText = '';
+      view.bringFill = 'skip';
+      view.looked = null;
+      view.customers = [];
+      view.flash = { kind: 'good', message: broughtInWords(out) };
+      return load();
+    }).catch(function (err) { say(err.message, 'bad'); });
+  };
+
+  var body = make('div', { class: 'pad' },
+    make('p', { class: 'none', style: 'margin-bottom:12px' },
+      'Export from the accounts as CSV and pick the file, or open the spreadsheet, '
+      + 'select the customers and paste them straight in. The first row can be '
+      + 'headings — Name, Address, Phone, Notes — or not.'),
+    make('div', { class: 'field' },
+      make('label', { for: 'bring-file', text: 'Pick a file you exported' }), file),
+    make('div', { class: 'field' },
+      make('label', { for: 'bring-text', text: 'Or paste the list here' }), box),
+    make('div', { class: 'field' },
+      make('label', { for: 'bring-fill', text: 'Anybody already on the books' }), fill),
+    make('div', { class: 'inline' },
+      make('button', { class: 'go', style: 'flex:1 1 200px',
+        onclick: function () { send(true); } }, 'Have a look first'),
+      make('button', { class: 'slim', style: 'flex:0 0 auto',
+        onclick: function () {
+          view.bringingIn = false;
+          view.bringText = '';
+          view.bringFill = 'skip';
+          view.looked = null;
+          paint();
+        } }, 'Never mind')));
+
+  if (view.looked) body.appendChild(lookedAt(view.looked, send));
+
+  return panel('Bring a customer list in', [], body);
+}
+
+function broughtInWords(out) {
+  var bits = [];
+  if (out.add) bits.push(out.add + (out.add === 1 ? ' customer added' : ' customers added'));
+  if (out.update) bits.push(out.update + ' filled in');
+  if (out.already) bits.push(out.already + ' already on the books');
+  return bits.length ? bits.join(', ') + '.' : 'Nothing new to bring in.';
+}
+
+/** What the look-first run found, before anything is written. */
+function lookedAt(out, send) {
+  var trouble = (out.problems || []).length + out.doubled;
+
+  var lines = make('div', { style: 'margin-top:18px' },
+    figures([
+      { value: String(out.add), label: out.add === 1 ? 'To add' : 'To add' },
+      out.update > 0 && { value: String(out.update), label: 'To fill in' },
+      out.already > 0 && { value: String(out.already), label: 'Already on' },
+      trouble > 0 && { value: String(trouble), label: 'Skipped' },
+    ]));
+
+  if (!out.headed) {
+    lines.appendChild(make('p', { class: 'asked', style: 'margin-top:12px',
+      text: 'No heading row found, so the columns were read in order: name, address, '
+        + 'phone, then notes. Check the rows below landed the right way round.' }));
+  }
+
+  if (out.look.length) {
+    lines.appendChild(make('div', { class: 'scroller', style: 'margin-top:12px' },
+      make('table', {},
+        make('thead', {}, make('tr', {},
+          make('th', { text: 'Name' }),
+          make('th', { text: 'Where' }),
+          make('th', { text: 'Phone' }),
+          make('th', { text: 'Notes' }))),
+        make('tbody', {}, out.look.map(function (one) {
+          return make('tr', {},
+            make('td', { text: one.name }),
+            make('td', { text: one.address || '—' }),
+            make('td', { text: one.phone || '—' }),
+            make('td', { text: one.notes || '—' }));
+        })))));
+
+    var rest = (out.add + out.update) - out.look.length;
+    if (rest > 0) {
+      lines.appendChild(make('p', { class: 'none', style: 'margin-top:8px',
+        text: 'The first few of ' + (out.add + out.update) + '. ' + rest + ' more after these.' }));
+    }
+  }
+
+  (out.problems || []).slice(0, 6).forEach(function (bad) {
+    lines.appendChild(make('p', { class: 'none', style: 'margin-top:6px',
+      text: 'Row ' + bad.line + ' skipped — ' + bad.why.toLowerCase() + '.' }));
+  });
+
+  if (out.doubled > 0) {
+    lines.appendChild(make('p', { class: 'none', style: 'margin-top:6px',
+      text: out.doubled + (out.doubled === 1 ? ' row was' : ' rows were')
+        + ' the same name as an earlier one, so only the first went in.' }));
+  }
+
+  lines.appendChild(make('button', {
+    class: 'go',
+    disabled: (out.add + out.update) === 0,
+    onclick: function () { send(false); },
+  }, (out.add + out.update) === 0
+    ? 'Nothing new to bring in'
+    : 'Bring in ' + (out.add + out.update)
+      + ((out.add + out.update) === 1 ? ' customer' : ' customers')));
+
+  return lines;
 }
 
 function paintOneCustomer(sheet) {

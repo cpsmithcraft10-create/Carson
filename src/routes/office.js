@@ -8,6 +8,7 @@ const {
   loadJobs, loadJob, loadShifts, loadShift, shiftTotals,
   officeCounts, loadCustomers, loadCustomer,
 } = require('../queries');
+const { readCustomers, sameName, MOST_ROWS } = require('../import');
 
 const KINDS = ['sprinkler', 'lighting', 'drainage', 'other'];
 
@@ -271,6 +272,108 @@ module.exports = [
       `).run(name, address, phone, notes, active, current.id);
 
       return { customer: loadCustomer(db, current.id) };
+    },
+  },
+
+  // ---- bringing a customer list in ---------------------------------------
+
+  {
+    method: 'POST',
+    path: '/api/office/customers/import',
+    handler({ db, body }) {
+      const text = v.text(body.text, 'The list', { required: true, max: 1000000 });
+      const onMatch = v.oneOf(body.on_match, 'What to do about matches',
+        ['skip', 'update'], { required: false, fallback: 'skip' });
+      const lookFirst = body.look_first !== false;
+
+      const read = readCustomers(text);
+      if (!read.customers.length) {
+        throw new HttpError(400, read.problems.length
+          ? 'Nothing in that had a customer name in it'
+          : 'There was nothing in that to read');
+      }
+
+      // Everybody already on file, by name, so a second run over the same
+      // list updates or skips rather than doubling everybody up.
+      const onFile = new Map();
+      for (const row of db.prepare('SELECT * FROM customers').all()) {
+        onFile.set(sameName(row.name), row);
+      }
+
+      const seen = new Set();
+      const toAdd = [];
+      const toUpdate = [];
+      const doubled = [];
+      const matched = [];
+
+      for (const one of read.customers) {
+        const key = sameName(one.name);
+
+        // The same name twice in one file: the first one wins.
+        if (seen.has(key)) { doubled.push(one); continue; }
+        seen.add(key);
+
+        const already = onFile.get(key);
+        if (!already) { toAdd.push(one); continue; }
+
+        matched.push({ ...one, id: already.id });
+
+        // Fill blanks only. What is on the books was typed by somebody who
+        // had been to the house; a stale export must not talk over it.
+        const next = {
+          address: already.address || one.address,
+          phone: already.phone || one.phone,
+          notes: already.notes || one.notes,
+        };
+        const changes = Object.keys(next).filter((k) => (next[k] || '') !== (already[k] || ''));
+        if (onMatch === 'update' && changes.length) {
+          toUpdate.push({ ...one, id: already.id, changes, next });
+        }
+      }
+
+      const summary = {
+        read: read.customers.length,
+        add: toAdd.length,
+        update: toUpdate.length,
+        already: matched.length - toUpdate.length,
+        doubled: doubled.length,
+        problems: read.problems,
+        headed: read.headed,
+        // What the office should check before committing: did the columns
+        // land where they think they did?
+        columns: read.columns ? Object.keys(read.columns) : [],
+        look: [...toAdd, ...toUpdate].slice(0, 8).map((one) => ({
+          name: one.name, address: one.address, phone: one.phone, notes: one.notes,
+        })),
+        most_rows: MOST_ROWS,
+      };
+
+      if (lookFirst) return { looked: true, ...summary };
+
+      const insert = db.prepare(
+        'INSERT INTO customers (name, address, phone, notes) VALUES (?, ?, ?, ?)',
+      );
+      const change = db.prepare(
+        'UPDATE customers SET address = ?, phone = ?, notes = ? WHERE id = ?',
+      );
+
+      // All of it or none of it: a list half in is worse than one not in.
+      db.exec('BEGIN');
+      try {
+        for (const one of toAdd) {
+          insert.run(one.name, one.address || null, one.phone || null, one.notes || null);
+        }
+        for (const one of toUpdate) {
+          change.run(one.next.address || null, one.next.phone || null,
+            one.next.notes || null, one.id);
+        }
+        db.exec('COMMIT');
+      } catch (err) {
+        db.exec('ROLLBACK');
+        throw err;
+      }
+
+      return { looked: false, ...summary, customers: loadCustomers(db, null) };
     },
   },
 
