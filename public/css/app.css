@@ -176,6 +176,8 @@ body {
 .top button.plain {
   width: auto;
   margin: 0;
+  flex: none;
+  white-space: nowrap;
   min-height: 38px;
   padding: 6px 12px;
   font-size: var(--t-small);
@@ -209,7 +211,7 @@ body {
 /* The week, seven columns of it. */
 .weekgrid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(148px, 1fr));
+  grid-template-columns: repeat(7, minmax(122px, 1fr));
   gap: 1px;
   background: var(--line);
   border-top: 1px solid var(--line);
@@ -266,6 +268,8 @@ body {
 .tabs {
   display: flex;
   gap: 2px;
+  /* Eight tabs will not read at 400px in one row: they wrap to two. */
+  flex-wrap: wrap;
   position: fixed;
   left: 0;
   right: 0;
@@ -278,7 +282,7 @@ body {
 }
 
 .tabs button {
-  flex: 1 1 0;
+  flex: 1 1 22%;
   width: auto;
   margin: 0;
   min-height: 54px;
@@ -330,8 +334,10 @@ body {
     background: transparent;
     border-top: 0;
     box-shadow: none;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    /* Eight office tabs do not fit one row: wrap, rather than hide two
+       behind a scrollbar nobody sees against a dark header. */
+    flex-wrap: wrap;
+    overflow-x: visible;
   }
 
   .tabs button {
@@ -363,7 +369,7 @@ body {
 .sheet {
   max-width: 880px;
   margin: 0 auto;
-  padding-block: var(--s5) calc(96px + env(safe-area-inset-bottom, 0px));
+  padding-block: var(--s5) calc(var(--barh, 66px) + 30px + env(safe-area-inset-bottom, 0px));
   padding-inline: var(--s4);
 }
 

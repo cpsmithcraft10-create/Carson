@@ -339,3 +339,20 @@ function logoMark(size) {
 
   return svg;
 }
+
+/* The tab bar is one row for the crew and two for the office. Measure it so
+   the page ends above it instead of behind it. */
+function watchBarHeight() {
+  var bar = document.querySelector('.tabs');
+  if (!bar) return;
+
+  var settle = function () {
+    document.documentElement.style.setProperty('--barh', bar.offsetHeight + 'px');
+  };
+
+  settle();
+  window.addEventListener('resize', settle);
+  if (window.ResizeObserver) new ResizeObserver(settle).observe(bar);
+}
+
+watchBarHeight();
