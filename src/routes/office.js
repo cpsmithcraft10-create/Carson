@@ -4,7 +4,10 @@ const v = require('../validate');
 const auth = require('../auth');
 const { HttpError } = require('../http');
 const { today, weekStart, addDays, round2 } = require('../time');
-const { loadJobs, loadJob, loadShifts, loadShift, shiftTotals } = require('../queries');
+const {
+  loadJobs, loadJob, loadShifts, loadShift, shiftTotals,
+  officeCounts, loadCustomers, loadCustomer,
+} = require('../queries');
 
 const KINDS = ['sprinkler', 'lighting', 'drainage', 'other'];
 
@@ -116,11 +119,21 @@ module.exports = [
     method: 'POST',
     path: '/api/office/jobs',
     handler({ db, user, body }) {
-      const customer = v.text(body.customer, 'Customer', { required: true, max: 120 });
       const date = v.date(body.job_date, 'Day');
       const kind = v.oneOf(body.kind, 'Type of work', KINDS, { required: false, fallback: 'other' });
-      const address = v.text(body.address, 'Address', { max: 200 });
-      const phone = v.text(body.phone, 'Phone', { max: 40 });
+
+      // Picking a known customer fills the blanks; the job keeps its own copy
+      // so old paperwork still reads true after they move house.
+      const known = body.customer_id
+        ? db.prepare('SELECT * FROM customers WHERE id = ?').get(v.id(body.customer_id, 'Customer'))
+        : null;
+      if (body.customer_id && !known) throw new HttpError(404, 'That customer was not found');
+
+      const customer = v.text(body.customer, 'Customer', { required: !known, max: 120 })
+        || known.name;
+      const address = v.text(body.address, 'Address', { max: 200 })
+        || (known ? known.address : null);
+      const phone = v.text(body.phone, 'Phone', { max: 40 }) || (known ? known.phone : null);
       const details = v.text(body.details, 'What needs doing', { max: 2000 });
       const estHours = v.decimal(body.est_hours, 'Hours it should take', { max: 24 });
 
@@ -129,9 +142,11 @@ module.exports = [
       if (crewIds.length === 0) v.fail('Pick at least one person for this job');
 
       const info = db.prepare(`
-        INSERT INTO jobs (job_date, kind, customer, address, phone, details, est_hours, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(date, kind, customer, address, phone, details, estHours, user.id);
+        INSERT INTO jobs (job_date, kind, customer, address, phone, customer_id, details,
+                          est_hours, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(date, kind, customer, address, phone, known ? known.id : null,
+             details, estHours, user.id);
 
       const jobId = Number(info.lastInsertRowid);
       setCrew(db, jobId, crewIds);
@@ -160,12 +175,14 @@ module.exports = [
         ? v.decimal(body.est_hours, 'Hours it should take', { max: 24 }) : job.est_hours;
       const status = body.status != null
         ? v.oneOf(body.status, 'Status', ['assigned', 'working', 'done']) : job.status;
+      const customerId = body.customer_id !== undefined
+        ? (body.customer_id ? v.id(body.customer_id, 'Customer') : null) : job.customer_id;
 
       db.prepare(`
         UPDATE jobs SET job_date = ?, kind = ?, customer = ?, address = ?, phone = ?,
-                        details = ?, est_hours = ?, status = ?
+                        customer_id = ?, details = ?, est_hours = ?, status = ?
          WHERE id = ?
-      `).run(date, kind, customer, address, phone, details, estHours, status, job.id);
+      `).run(date, kind, customer, address, phone, customerId, details, estHours, status, job.id);
 
       if (Array.isArray(body.crew_ids)) {
         const crewIds = [...new Set(body.crew_ids.map((x) => v.id(x, 'Crew member')))];
@@ -186,6 +203,185 @@ module.exports = [
       // Hours already put against the job survive; they just lose the customer name.
       db.prepare('DELETE FROM jobs WHERE id = ?').run(job.id);
       return { ok: true };
+    },
+  },
+
+  // ---- customers ---------------------------------------------------------
+
+  {
+    method: 'GET',
+    path: '/api/office/customers',
+    handler({ db, query }) {
+      const search = v.text(query.q, 'Search', { max: 80 });
+      return { customers: loadCustomers(db, search) };
+    },
+  },
+
+  {
+    method: 'GET',
+    path: '/api/office/customers/:id',
+    handler({ db, params }) {
+      const customer = loadCustomer(db, v.id(params.id, 'Customer'));
+      if (!customer) throw new HttpError(404, 'That customer was not found');
+
+      const jobs = loadJobs(db, 'j.customer_id = ?', [customer.id]).reverse();
+      const shifts = loadShifts(db,
+        's.job_id IN (SELECT id FROM jobs WHERE customer_id = ?)', [customer.id]);
+
+      return { customer, jobs, totals: shiftTotals(shifts) };
+    },
+  },
+
+  {
+    method: 'POST',
+    path: '/api/office/customers',
+    handler({ db, body }) {
+      const name = v.text(body.name, 'Customer name', { required: true, max: 120 });
+      const address = v.text(body.address, 'Address', { max: 200 });
+      const phone = v.text(body.phone, 'Phone', { max: 40 });
+      const notes = v.text(body.notes, 'Notes', { max: 2000 });
+
+      const info = db.prepare(`
+        INSERT INTO customers (name, address, phone, notes) VALUES (?, ?, ?, ?)
+      `).run(name, address, phone, notes);
+
+      return { customer: loadCustomer(db, Number(info.lastInsertRowid)) };
+    },
+  },
+
+  {
+    method: 'PATCH',
+    path: '/api/office/customers/:id',
+    handler({ db, params, body }) {
+      const current = db.prepare('SELECT * FROM customers WHERE id = ?').get(params.id);
+      if (!current) throw new HttpError(404, 'That customer was not found');
+
+      const name = body.name != null
+        ? v.text(body.name, 'Customer name', { required: true, max: 120 }) : current.name;
+      const address = body.address !== undefined
+        ? v.text(body.address, 'Address', { max: 200 }) : current.address;
+      const phone = body.phone !== undefined
+        ? v.text(body.phone, 'Phone', { max: 40 }) : current.phone;
+      const notes = body.notes !== undefined
+        ? v.text(body.notes, 'Notes', { max: 2000 }) : current.notes;
+      const active = body.active != null ? (body.active ? 1 : 0) : current.active;
+
+      db.prepare(`
+        UPDATE customers SET name = ?, address = ?, phone = ?, notes = ?, active = ? WHERE id = ?
+      `).run(name, address, phone, notes, active, current.id);
+
+      return { customer: loadCustomer(db, current.id) };
+    },
+  },
+
+  // ---- the week at a glance ----------------------------------------------
+
+  {
+    method: 'GET',
+    path: '/api/office/week',
+    handler({ db, query }) {
+      const from = query.from ? v.date(query.from, 'From') : weekStart(today());
+      const to = addDays(from, 6);
+
+      const jobs = loadJobs(db, 'j.job_date BETWEEN ? AND ?', [from, to]);
+      const shifts = loadShifts(db, 's.work_date BETWEEN ? AND ?', [from, to]);
+
+      const days = [];
+      for (let i = 0; i < 7; i += 1) {
+        const date = addDays(from, i);
+        const onDay = jobs.filter((j) => j.job_date === date);
+        const worked = shifts.filter((s) => s.work_date === date && s.status !== 'question');
+
+        days.push({
+          date,
+          jobs: onDay,
+          hours: round2(worked.reduce((t, s) => t + s.hours, 0)),
+          pay: round2(worked.reduce((t, s) => t + s.pay, 0)),
+          done: onDay.filter((j) => j.status === 'done').length,
+        });
+      }
+
+      // Who is spoken for on each day, so double-booking is visible.
+      const people = db.prepare("SELECT id, name FROM employees WHERE active = 1 AND role = 'crew' ORDER BY name").all();
+
+      return {
+        from,
+        to,
+        days,
+        people,
+        totals: {
+          jobs: jobs.length,
+          hours: round2(days.reduce((t, d) => t + d.hours, 0)),
+          pay: round2(days.reduce((t, d) => t + d.pay, 0)),
+        },
+      };
+    },
+  },
+
+  // ---- put the same job out again ----------------------------------------
+
+  {
+    method: 'POST',
+    path: '/api/office/jobs/:id/copy',
+    handler({ db, user, params, body }) {
+      const source = db.prepare('SELECT * FROM jobs WHERE id = ?').get(params.id);
+      if (!source) throw new HttpError(404, 'That job was not found');
+
+      const crew = db.prepare('SELECT employee_id FROM crew_on_job WHERE job_id = ?')
+        .all(source.id).map((r) => r.employee_id);
+
+      let dates = [];
+
+      if (Array.isArray(body.dates) && body.dates.length) {
+        dates = body.dates.map((d) => v.date(d, 'Day'));
+      } else {
+        // Seasonal work repeats: same day of the week, so many weeks running.
+        const weeks = v.whole(body.every_weeks_for, 'Number of weeks',
+          { min: 1, max: 26, fallback: 0 });
+        if (!weeks) v.fail('Say which days to copy it to, or how many weeks to repeat it');
+        for (let i = 1; i <= weeks; i += 1) dates.push(addDays(source.job_date, i * 7));
+      }
+
+      if (dates.length > 26) v.fail('That is more copies than this will make at once');
+
+      const insert = db.prepare(`
+        INSERT INTO jobs (job_date, kind, customer, address, phone, customer_id, details,
+                          est_hours, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const addCrew = db.prepare('INSERT INTO crew_on_job (job_id, employee_id) VALUES (?, ?)');
+
+      const made = [];
+      for (const date of dates) {
+        const info = insert.run(date, source.kind, source.customer, source.address,
+          source.phone, source.customer_id, source.details, source.est_hours, user.id);
+        const jobId = Number(info.lastInsertRowid);
+        for (const employeeId of crew) addCrew.run(jobId, employeeId);
+        made.push(jobId);
+      }
+
+      return { made: made.length, jobs: made.map((id) => loadJob(db, id)) };
+    },
+  },
+
+  // ---- find anything -----------------------------------------------------
+
+  {
+    method: 'GET',
+    path: '/api/office/search',
+    handler({ db, query }) {
+      const term = v.text(query.q, 'Search', { max: 80 });
+      if (!term || term.length < 2) return { term: term || '', customers: [], jobs: [] };
+
+      const like = `%${term}%`;
+
+      return {
+        term,
+        customers: loadCustomers(db, term).slice(0, 12),
+        jobs: loadJobs(db,
+          '(j.customer LIKE ? OR j.address LIKE ? OR j.details LIKE ? OR j.materials LIKE ?)',
+          [like, like, like, like]).reverse().slice(0, 25),
+      };
     },
   },
 
@@ -452,16 +648,33 @@ module.exports = [
         else row.waiting_hours = round2(row.waiting_hours + shift.hours);
       }
 
-      const rows = [...perPerson.values()].sort((a, b) => a.name.localeCompare(b.name));
+      const rows = [...perPerson.values()]
+        .map((row) => ({ ...row, over_40: round2(Math.max(0, row.hours - 40)) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      // What went into the ground over the period, for billing and restocking.
+      const parts = loadJobs(db, `
+        j.job_date BETWEEN ? AND ? AND j.status = 'done'
+        AND j.materials IS NOT NULL AND TRIM(j.materials) != ''
+      `, [from, to]).map((j) => ({
+        job_id: j.id,
+        job_date: j.job_date,
+        customer: j.customer,
+        kind: j.kind,
+        materials: j.materials,
+      }));
 
       return {
         from,
         to,
         rows,
         shifts,
+        parts,
+        days: Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1,
         totals: {
           hours: round2(rows.reduce((t, r) => t + r.hours, 0)),
           ok_hours: round2(rows.reduce((t, r) => t + r.ok_hours, 0)),
+          over_40: round2(rows.reduce((t, r) => t + r.over_40, 0)),
           pay: round2(rows.reduce((t, r) => t + r.pay, 0)),
         },
       };
@@ -509,3 +722,23 @@ module.exports = [
     },
   },
 ];
+
+/*
+ * Every office screen shows the same two numbers up in its tab bar. Rather
+ * than the browser asking for them again after each switch, each GET carries
+ * them home — one round trip per screen instead of two.
+ */
+module.exports = module.exports.map((route) => {
+  if (route.method !== 'GET' || route.path.endsWith('.csv')) return route;
+
+  const inner = route.handler;
+
+  return {
+    ...route,
+    handler(ctx) {
+      const result = inner(ctx);
+      if (!result || typeof result !== 'object') return result;
+      return { ...result, counts: officeCounts(ctx.db) };
+    },
+  };
+});

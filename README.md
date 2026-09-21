@@ -26,8 +26,9 @@ To try it before putting anything real in:
 npm run sample
 ```
 
-That loads a sample crew, three jobs and a couple of announcements, and prints
-the sign-ins. Delete `data/custom-outdoor.db` to wipe it and start again.
+That loads a sample crew, four customers, their jobs and a couple of
+announcements, and prints the sign-ins. Delete `data/custom-outdoor.db` to wipe
+it and start again.
 
 ## What the crew see
 
@@ -60,18 +61,32 @@ They can also:
 - **Today** — how many are out on jobs, hours down, labour cost, and the board
   for the day: every job with its crew, whether it is started, being worked on
   or finished, and the notes and parts that came back from the field.
+- **The week** — Monday to Sunday at a glance, every day in a column with its
+  jobs, so the week can be filled in without clicking through a day at a time.
+  Days that are empty stand out, which is the point.
 - **Hours** — everything sent in, waiting to be OK'd. *These look right*, or
   *Ask about it* with a question. The question shows in red on that person's
-  phone; when they fix the times it comes straight back.
-- **Give out work** — customer, address, phone, type of work, the day, roughly
-  how long, what needs doing, and who is going. More than one person can be put
-  on the same job. Existing jobs can be changed or moved to another crew.
+  phone; when they fix the times it comes straight back. The tab carries a
+  count so nothing sits waiting unnoticed.
+- **Give out work** — pick a customer already on file and the address and phone
+  fill themselves in, or type a new one. Type of work, the day, roughly how
+  long, what needs doing, and who is going. More than one person can be put on
+  the same job. Existing jobs can be changed or moved to another crew, and
+  **put out again** — same crew, same notes — either on days you name or every
+  week for as many weeks as the season runs.
+- **Customers** — everybody worked for, with their address, phone, notes for
+  next time (gate code, dog, where the controller is), how many jobs they have
+  had and when the last one was. Open one for its whole history.
+- **Search** — one box across customers and jobs: a name, a street, a part
+  fitted, anything written in the notes.
 - **Announcements** — put something out to everybody, mark it important so it
   sits at the top in colour, and see who has actually read it.
 - **The crew** — add people, change rates, set a new sign-in number, take
   somebody off (their hours are kept, they just cannot sign in).
-- **Payroll** — totals per person over any dates, with pay from their rate, and
-  a CSV for whoever does the books.
+- **Payroll** — totals per person over any dates, with pay from their rate,
+  **anything over 40 hours flagged**, a day-by-day breakdown, a roll-up of
+  every part used over the period for billing, and a CSV for whoever does the
+  books.
 
 ## Things worth knowing
 
@@ -90,6 +105,12 @@ They can also:
 - **Sign-in numbers are hashed** (scrypt), never stored as text. A new number
   signs that person out everywhere.
 - **Weeks run Monday to Sunday.**
+- **A job keeps the address it was done at.** Picking a customer copies their
+  name, address and phone onto the job there and then, so when somebody moves
+  the old paperwork still says where the work actually happened.
+- **The office screen asks for one thing at a time.** Each tab is a single
+  request, and the counts on the tabs ride along with it, so switching about on
+  a phone in the truck stays quick.
 
 ## Settings
 
@@ -127,11 +148,13 @@ Back up `data/custom-outdoor.db` — that one file is every hour anybody worked.
 npm test
 ```
 
-29 tests covering the hours arithmetic (breaks, work past midnight, rounding),
+44 tests covering the hours arithmetic (breaks, work past midnight, rounding),
 a whole day from giving out a job through to payroll, two people on one job,
 work that was never on a list, announcements and who read them, a job running
-over two days, and the boundaries: the crew cannot reach the office side, cannot
-log against somebody else's job, and cannot change hours already OK'd.
+over two days, customers and their history, putting a job out again week after
+week, searching, over-40 flagging and the parts roll-up, and the boundaries:
+the crew cannot reach the office side, cannot log against somebody else's job,
+and cannot change hours already OK'd.
 
 ## Layout
 

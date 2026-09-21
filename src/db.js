@@ -17,6 +17,18 @@ CREATE TABLE IF NOT EXISTS employees (
   created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS customers (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT    NOT NULL,
+  address    TEXT,
+  phone      TEXT,
+  notes      TEXT,
+  active     INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   job_date     TEXT    NOT NULL,
@@ -25,6 +37,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   customer     TEXT    NOT NULL,
   address      TEXT,
   phone        TEXT,
+  customer_id  INTEGER REFERENCES customers(id) ON DELETE SET NULL,
   details      TEXT,
   est_hours    REAL,
   status       TEXT    NOT NULL DEFAULT 'assigned'
@@ -39,6 +52,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 CREATE INDEX IF NOT EXISTS idx_jobs_date ON jobs(job_date);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_customer ON jobs(customer_id);
 
 -- A job can take a two or three person crew, so this is many-to-many.
 CREATE TABLE IF NOT EXISTS crew_on_job (
@@ -101,6 +115,23 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_employee ON sessions(employee_id);
 `;
 
+/**
+ * Columns added after the first release. CREATE TABLE IF NOT EXISTS leaves an
+ * existing table alone, so a database made by an older version needs these
+ * filled in by hand.
+ */
+const LATER_COLUMNS = [
+  ['jobs', 'customer_id', 'INTEGER REFERENCES customers(id) ON DELETE SET NULL'],
+];
+
+function addMissingColumns(db) {
+  for (const [table, column, type] of LATER_COLUMNS) {
+    const has = db.prepare(`PRAGMA table_info(${table})`).all()
+      .some((c) => c.name === column);
+    if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
+
 /** Opens (and if needed creates) the database. Pass ':memory:' for tests. */
 function open(file) {
   const target = file || process.env.DB_FILE
@@ -112,6 +143,7 @@ function open(file) {
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
   db.exec(SCHEMA);
+  addMissingColumns(db);
   return db;
 }
 

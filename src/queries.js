@@ -3,9 +3,9 @@
 const { hoursWorked, round2 } = require('./time');
 
 const JOB_COLUMNS = `
-  j.id, j.job_date, j.kind, j.customer, j.address, j.phone, j.details, j.est_hours,
-  j.status, j.wrap_notes, j.materials, j.finished_at, j.created_at,
-  f.name AS finished_by_name
+  j.id, j.job_date, j.kind, j.customer, j.address, j.phone, j.customer_id,
+  j.details, j.est_hours, j.status, j.wrap_notes, j.materials, j.finished_at,
+  j.created_at, f.name AS finished_by_name
 `;
 
 const SHIFT_COLUMNS = `
@@ -91,4 +91,36 @@ function shiftTotals(list) {
   };
 }
 
-module.exports = { loadJobs, loadJob, loadShifts, loadShift, shapeShift, shiftTotals };
+/**
+ * The two numbers the office bar always shows. Kept as counts so switching
+ * tabs does not drag whole shift rows across the wire just to length them.
+ */
+function officeCounts(db) {
+  return {
+    waiting: db.prepare("SELECT COUNT(*) AS n FROM shifts WHERE status = 'sent'").get().n,
+    on_the_clock: db.prepare("SELECT COUNT(*) AS n FROM shifts WHERE status = 'open'").get().n,
+  };
+}
+
+/** One customer, with enough history for the office to recognise them. */
+function loadCustomers(db, search) {
+  const like = search ? `%${search}%` : null;
+
+  return db.prepare(`
+    SELECT c.id, c.name, c.address, c.phone, c.notes, c.active,
+           (SELECT COUNT(*) FROM jobs j WHERE j.customer_id = c.id) AS job_count,
+           (SELECT MAX(j.job_date) FROM jobs j WHERE j.customer_id = c.id) AS last_job
+      FROM customers c
+     ${like ? 'WHERE c.name LIKE ? OR c.address LIKE ? OR c.phone LIKE ?' : ''}
+     ORDER BY c.active DESC, c.name
+  `).all(...(like ? [like, like, like] : []));
+}
+
+function loadCustomer(db, id) {
+  return loadCustomers(db).find((c) => c.id === Number(id)) || null;
+}
+
+module.exports = {
+  loadJobs, loadJob, loadShifts, loadShift, shapeShift, shiftTotals,
+  officeCounts, loadCustomers, loadCustomer,
+};

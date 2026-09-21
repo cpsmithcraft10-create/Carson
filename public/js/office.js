@@ -3,17 +3,21 @@
 /* The office screen. Hand out work, keep an eye on the day, OK hours, post
    announcements, run payroll. */
 
-var TABS = ['today', 'hours', 'jobs', 'notices', 'crew', 'pay'];
+var TABS = ['today', 'week', 'hours', 'jobs', 'customers', 'notices', 'crew', 'pay'];
 
 var view = {
   me: null,
   tab: 'today',
   day: today(),
-  jobsTo: null,
+  weekFrom: mondayOf(today()),
   payFrom: mondayOf(today()),
   payTo: shiftDate(mondayOf(today()), 6),
   payWho: '',
   people: [],
+  customers: [],
+  openCustomer: null,
+  copying: null,
+  hunting: null,      // a search term, which takes over the sheet
   data: {},
   flash: null,
   editingJob: null,
@@ -21,34 +25,65 @@ var view = {
 
 /* ----------------------------- loading ---------------------------- */
 
-function loadPeople() {
-  return api('/api/office/people?include_past=1').then(function (r) { view.people = r.people; });
-}
-
 function fetchTab() {
+  if (view.hunting) return api('/api/office/search?q=' + encodeURIComponent(view.hunting));
+
   if (view.tab === 'today') return api('/api/office/day?date=' + view.day);
+  if (view.tab === 'week') return api('/api/office/week?from=' + view.weekFrom);
   if (view.tab === 'hours') return api('/api/office/waiting');
   if (view.tab === 'jobs') {
-    var to = view.jobsTo || shiftDate(view.day, 13);
-    return api('/api/office/jobs?from=' + view.day + '&to=' + to);
+    return api('/api/office/jobs?from=' + view.day + '&to=' + shiftDate(view.day, 13));
+  }
+  if (view.tab === 'customers') {
+    return view.openCustomer
+      ? api('/api/office/customers/' + view.openCustomer)
+      : api('/api/office/customers');
   }
   if (view.tab === 'notices') return api('/api/office/notices');
-  if (view.tab === 'crew') return loadPeople().then(function () { return {}; });
+  if (view.tab === 'crew') return api('/api/office/people?include_past=1');
 
   var q = '?from=' + view.payFrom + '&to=' + view.payTo +
     (view.payWho ? '&employee_id=' + view.payWho : '');
   return api('/api/office/payroll' + q);
 }
 
+/* One request per screen. The tab-bar counts ride home on every response, and
+   the crew list is only re-read by the screens that actually show it. */
 function load() {
-  return Promise.all([fetchTab(), api('/api/office/waiting')])
-    .then(function (both) {
-      view.data = both[0];
-      var pip = document.getElementById('hours-pip');
-      pip.textContent = both[1].shifts.length ? '(' + both[1].shifts.length + ')' : '';
-      paint();
-    })
-    .catch(function (err) { say(err.message, 'bad'); });
+  // The job form needs the crew and the customer list; both are cached after
+  // the first read, so a steady state is still one request per screen.
+  var also = [];
+  if (view.tab === 'jobs') also.push(ensurePeople(), ensureCustomers());
+  if (view.tab === 'pay') also.push(ensurePeople());
+
+  return Promise.all([fetchTab()].concat(also)).then(function (all) {
+    var data = all[0];
+    view.data = data;
+    if (data.people) view.people = data.people;
+    if (data.customers && !view.openCustomer) view.customers = data.customers;
+    paintCounts(data.counts);
+    paint();
+  }).catch(function (err) { say(err.message, 'bad'); });
+}
+
+function paintCounts(counts) {
+  if (!counts) return;
+
+  var pip = document.getElementById('pip-hours');
+  pip.className = counts.waiting ? 'pipdot' : '';
+  pip.textContent = counts.waiting ? String(counts.waiting) : '';
+}
+
+/* The job form and the payroll picker need the crew even on screens that do
+   not list them, so fetch it once and keep it. */
+function ensurePeople() {
+  if (view.people.length) return Promise.resolve();
+  return api('/api/office/people?include_past=1').then(function (r) { view.people = r.people; });
+}
+
+function ensureCustomers() {
+  if (view.customers.length) return Promise.resolve();
+  return api('/api/office/customers').then(function (r) { view.customers = r.customers; });
 }
 
 function say(message, kind) {
@@ -67,10 +102,22 @@ function goTab(tab) {
   view.tab = tab;
   view.flash = null;
   view.editingJob = null;
-  TABS.forEach(function (t) {
-    document.getElementById('tab-' + t).setAttribute('aria-selected', String(t === tab));
-  });
+  view.openCustomer = null;
+  view.copying = null;
+  view.hunting = null;
+
+  var box = document.getElementById('search');
+  if (box) box.value = '';
+
+  markTab();
   load();
+}
+
+function markTab() {
+  TABS.forEach(function (t) {
+    document.getElementById('tab-' + t)
+      .setAttribute('aria-selected', String(!view.hunting && t === view.tab));
+  });
 }
 
 /* ----------------------------- painting --------------------------- */
@@ -91,14 +138,235 @@ function paint() {
     sheet.appendChild(make('div', { class: 'flash ' + view.flash.kind, text: view.flash.message }));
   }
 
+  if (view.hunting) { paintSearch(sheet); return; }
+
   ({
     today: paintToday,
+    week: paintWeek,
     hours: paintHours,
     jobs: paintJobs,
+    customers: paintCustomers,
     notices: paintNotices,
     crew: paintCrew,
     pay: paintPay,
   })[view.tab](sheet);
+}
+
+/* ------------------------------ the week -------------------------------- */
+
+function paintWeek(sheet) {
+  var w = view.data;
+
+  sheet.appendChild(make('div', { class: 'daybar' },
+    make('button', { class: 'slim', 'aria-label': 'Week before',
+      onclick: function () { view.weekFrom = shiftDate(view.weekFrom, -7); load(); } }, '\u2039'),
+    make('h1', {}, shortDate(w.from) + ' to ' + shortDate(w.to),
+      w.from !== mondayOf(today()) && make('em', { text: 'not this week' })),
+    make('button', { class: 'slim', 'aria-label': 'Week after',
+      onclick: function () { view.weekFrom = shiftDate(view.weekFrom, 7); load(); } }, '\u203a')));
+
+  var grid = make('div', { class: 'weekgrid' }, w.days.map(function (d) {
+    var weekend = [0, 6].indexOf(new Date(d.date + 'T00:00:00Z').getUTCDay()) >= 0;
+
+    return make('div', {
+      class: 'weekday' + (d.date === today() ? ' is-today' : '') + (weekend ? ' weekend' : ''),
+    },
+      make('h4', {},
+        shortDate(d.date).split(', ')[0],
+        make('span', { text: shortDate(d.date).split(', ')[1] })),
+      d.jobs.map(function (job) {
+        return make('button', {
+          class: 'weekjob ' + job.status,
+          onclick: function () { view.day = job.job_date; goTab('today'); },
+        }, job.customer,
+           make('em', { text: job.crew.map(function (c) { return c.name.split(' ')[0]; }).join(', ') || 'nobody' }));
+      }),
+      d.jobs.length === 0 && make('p', { class: 'weekfoot', text: '—' }),
+      d.hours > 0 && make('p', { class: 'weekfoot', text: d.hours.toFixed(2) + ' h logged' }));
+  }));
+
+  sheet.appendChild(panel('The board, seven days at a time', [
+    make('span', { class: 'dim', style: 'font-size:15px',
+      text: w.totals.jobs + ' jobs · ' + w.totals.hours.toFixed(2) + ' hours · ' +
+            CASH.format(w.totals.pay) }),
+  ], make('div', { class: 'scroller' }, grid)));
+
+  sheet.appendChild(panel('Who is spoken for', [], make('div', { class: 'scroller' }, make('table', {},
+    make('thead', {}, make('tr', {},
+      make('th', { text: 'Name' }),
+      w.days.map(function (d) {
+        return make('th', { class: 'r', text: shortDate(d.date).split(', ')[0] });
+      }))),
+    make('tbody', {}, w.people.map(function (p) {
+      return make('tr', {},
+        make('td', { text: p.name }),
+        w.days.map(function (d) {
+          var n = d.jobs.filter(function (j) {
+            return j.crew.some(function (c) { return c.id === p.id; });
+          }).length;
+          return make('td', { class: 'r', style: n ? '' : 'color:var(--ink-soft)',
+            text: n ? String(n) : '·' });
+        }));
+    }))))));
+}
+
+/* ----------------------------- customers -------------------------------- */
+
+function paintCustomers(sheet) {
+  if (view.openCustomer) { paintOneCustomer(sheet); return; }
+
+  var list = view.data.customers || [];
+
+  sheet.appendChild(newCustomerForm());
+
+  sheet.appendChild(panel('Customers',
+    list.length ? [make('span', { class: 'pip', text: String(list.length) })] : [],
+    list.length
+      ? make('div', { class: 'scroller' }, make('table', {},
+          make('thead', {}, make('tr', {},
+            make('th', { text: 'Name' }),
+            make('th', { text: 'Where' }),
+            make('th', { text: 'Phone' }),
+            make('th', { class: 'r', text: 'Jobs' }),
+            make('th', { text: 'Last seen' }),
+            make('th', { text: '' }))),
+          make('tbody', {}, list.map(function (c) {
+            return make('tr', {},
+              make('td', { text: c.name }),
+              make('td', { text: c.address || '—' }),
+              make('td', { text: c.phone || '—' }),
+              make('td', { class: 'r', text: String(c.job_count) }),
+              make('td', { text: c.last_job ? shortDate(c.last_job) : 'never' }),
+              make('td', {}, make('button', {
+                class: 'slim', style: 'margin:0',
+                onclick: function () { view.openCustomer = c.id; load(); },
+              }, 'Open')));
+          }))))
+      : make('div', { class: 'pad' },
+          make('p', { class: 'none', text: 'Nobody on the books yet.' }))));
+}
+
+function newCustomerForm() {
+  var name = make('input', { id: 'cust-name', maxlength: '120', placeholder: 'Weaver residence' });
+  var address = make('input', { id: 'cust-address', maxlength: '200', placeholder: '1420 Oak Hollow Dr' });
+  var phone = make('input', { id: 'cust-phone', maxlength: '40', placeholder: '555-0142' });
+  var notes = make('textarea', { id: 'cust-notes', maxlength: '2000',
+    placeholder: 'Gate code 4471. Dog is friendly but loud. Bills quarterly.' });
+
+  return panel('Put somebody on the books', [], make('div', { class: 'pad' },
+    make('div', { class: 'two', style: 'margin-bottom:13px' },
+      make('div', {}, make('label', { for: 'cust-name', text: 'Their name' }), name),
+      make('div', {}, make('label', { for: 'cust-phone', text: 'Phone' }), phone)),
+    make('div', { class: 'field' },
+      make('label', { for: 'cust-address', text: 'Address' }), address),
+    make('div', { class: 'field' },
+      make('label', { for: 'cust-notes', text: 'Anything worth remembering' }), notes),
+    make('button', {
+      class: 'go',
+      onclick: function () {
+        if (!name.value.trim()) { say('Put their name in.', 'bad'); return; }
+        view.customers = [];
+        then(api('/api/office/customers', {
+          method: 'POST',
+          body: {
+            name: name.value.trim(),
+            address: address.value.trim(),
+            phone: phone.value.trim(),
+            notes: notes.value.trim(),
+          },
+        }), 'On the books. You can book them a job now.');
+      },
+    }, 'Add them')));
+}
+
+function paintOneCustomer(sheet) {
+  var c = view.data.customer;
+  var jobs = view.data.jobs || [];
+  var totals = view.data.totals || { hours: 0, pay: 0 };
+
+  sheet.appendChild(make('div', { class: 'backrow' },
+    make('button', { onclick: function () { view.openCustomer = null; load(); } },
+      '\u2039 Back to customers')));
+
+  sheet.appendChild(panel(c.name, [], make('div', { class: 'pad' },
+    c.address && make('p', { class: 'jobmeta' }, addressLink(c.address)),
+    c.phone && make('p', { class: 'jobmeta' }, 'Call: ', phoneLink(c.phone)),
+    c.notes && make('p', { class: 'needdoing', style: 'margin-top:14px', text: c.notes }),
+    make('div', { class: 'inline' },
+      make('button', { class: 'slim', style: 'margin:0',
+        onclick: function () { editCustomer(c); } }, 'Change their details'),
+      make('button', { class: 'slim', style: 'margin:0',
+        onclick: function () {
+          view.openCustomer = null;
+          view.editingJob = null;
+          view.bookFor = c;
+          goTab('jobs');
+        } }, 'Book them a job'))),
+    figures([
+      { value: String(c.job_count), label: 'Jobs done' },
+      { value: totals.hours.toFixed(2), label: 'Hours on site' },
+      { value: CASH.format(totals.pay), label: 'Labour spent' },
+    ])));
+
+  sheet.appendChild(panel('Everything done for them', [],
+    jobs.length
+      ? make('ul', { class: 'jobs' }, jobs.map(officeJobItem))
+      : make('div', { class: 'pad' },
+          make('p', { class: 'none', text: 'No jobs on record yet.' }))));
+}
+
+function editCustomer(c) {
+  var name = prompt('Their name', c.name);
+  if (name === null) return;
+  var address = prompt('Address', c.address || '');
+  if (address === null) return;
+  var phone = prompt('Phone', c.phone || '');
+  if (phone === null) return;
+  var notes = prompt('Anything worth remembering', c.notes || '');
+  if (notes === null) return;
+
+  view.customers = [];
+  then(api('/api/office/customers/' + c.id, {
+    method: 'PATCH',
+    body: { name: name.trim(), address: address.trim(), phone: phone.trim(), notes: notes.trim() },
+  }), 'Their details are updated. Old jobs keep what was true at the time.');
+}
+
+/* ------------------------------- search --------------------------------- */
+
+function paintSearch(sheet) {
+  var d = view.data;
+
+  sheet.appendChild(make('div', { class: 'backrow' },
+    make('button', { onclick: function () { goTab(view.tab); } }, '\u2039 Back')));
+
+  sheet.appendChild(panel('Customers matching "' + d.term + '"',
+    [make('span', { class: 'pip', text: String(d.customers.length) })],
+    d.customers.length
+      ? make('div', { class: 'scroller' }, make('table', {},
+          make('tbody', {}, d.customers.map(function (c) {
+            return make('tr', {},
+              make('td', { text: c.name }),
+              make('td', { text: c.address || '—' }),
+              make('td', { class: 'r', text: c.job_count + ' jobs' }),
+              make('td', {}, make('button', {
+                class: 'slim', style: 'margin:0',
+                onclick: function () {
+                  view.hunting = null;
+                  view.tab = 'customers';
+                  view.openCustomer = c.id;
+                  markTab();
+                  load();
+                },
+              }, 'Open')));
+          }))))
+      : make('div', { class: 'pad' }, make('p', { class: 'none', text: 'Nobody by that name.' }))));
+
+  sheet.appendChild(panel('Jobs matching "' + d.term + '"',
+    [make('span', { class: 'pip', text: String(d.jobs.length) })],
+    d.jobs.length
+      ? make('ul', { class: 'jobs' }, d.jobs.map(officeJobItem))
+      : make('div', { class: 'pad' }, make('p', { class: 'none', text: 'No jobs match that.' }))));
 }
 
 /* ------------------------------ today ----------------------------- */
@@ -161,7 +429,33 @@ function officeJobItem(job) {
       make('button', { class: 'slim', style: 'margin:0',
         onclick: function () { view.editingJob = job.id; goTab('jobs'); } }, 'Change it'),
       make('button', { class: 'slim', style: 'margin:0',
+        onclick: function () { repeatJob(job); } }, 'Put it out again'),
+      make('button', { class: 'slim', style: 'margin:0',
         onclick: function () { removeJob(job); } }, 'Take it off'))));
+}
+
+/* Seasonal work is the same call round again: blowouts, startups, lamp checks. */
+function repeatJob(job) {
+  var asked = prompt(
+    'Put "' + job.customer + '" out again.\n\n' +
+    'How many weeks running? (same day each week)\n' +
+    'Or type a date like 2026-10-14 for one more only.', '4');
+
+  if (asked === null) return;
+  asked = asked.trim();
+  if (!asked) return;
+
+  var body = /^\d{4}-\d{2}-\d{2}$/.test(asked)
+    ? { dates: [asked] }
+    : { every_weeks_for: Number(asked) };
+
+  if (!body.dates && !(body.every_weeks_for > 0)) {
+    say('Put in a number of weeks, or a date like 2026-10-14.', 'bad');
+    return;
+  }
+
+  then(api('/api/office/jobs/' + job.id + '/copy', { method: 'POST', body: body }),
+    'Booked again. Check The week to see where it landed.');
 }
 
 function shiftButtons(s) {
@@ -280,12 +574,39 @@ function paintJobs(sheet) {
 }
 
 function jobForm(job) {
+  var booking = view.bookFor;
+  view.bookFor = null;
+
+  var known = make('select', { id: 'job-known' },
+    make('option', { value: '' }, 'Somebody new — I will type it'),
+    view.customers.map(function (c) { return make('option', { value: String(c.id) }, c.name); }));
+
+  if (job && job.customer_id) known.value = String(job.customer_id);
+  else if (booking) known.value = String(booking.id);
+
   var customer = make('input', { id: 'job-customer', maxlength: '120',
-    placeholder: 'Weaver residence', value: job ? job.customer : '' });
+    placeholder: 'Weaver residence',
+    value: job ? job.customer : (booking ? booking.name : '') });
   var address = make('input', { id: 'job-address', maxlength: '200',
-    placeholder: '1420 Oak Hollow Dr', value: job && job.address ? job.address : '' });
-  var phone = make('input', { id: 'job-phone', maxlength: '40',
-    placeholder: '555-0142', value: job && job.phone ? job.phone : '' });
+    placeholder: '1420 Oak Hollow Dr',
+    value: job && job.address ? job.address : (booking && booking.address ? booking.address : '') });
+  var phone = make('input', { id: 'job-phone', maxlength: '40', placeholder: '555-0142',
+    value: job && job.phone ? job.phone : (booking && booking.phone ? booking.phone : '') });
+
+  // Picking somebody off the books fills their details in for you.
+  var typed = make('div', { class: 'field' },
+    make('label', { for: 'job-customer', text: 'Customer name' }), customer);
+
+  known.addEventListener('change', function () {
+    var pick = view.customers.filter(function (c) { return String(c.id) === known.value; })[0];
+    typed.hidden = !!pick;
+    if (!pick) return;
+    customer.value = pick.name;
+    address.value = pick.address || '';
+    phone.value = pick.phone || '';
+  });
+
+  typed.hidden = !!known.value;
   var when = make('input', { type: 'date', id: 'job-day', value: job ? job.job_date : view.day });
   var est = make('input', { type: 'number', id: 'job-est', min: '0', max: '24', step: '.5',
     placeholder: '4', value: job && job.est_hours != null ? String(job.est_hours) : '' });
@@ -318,7 +639,9 @@ function jobForm(job) {
     : make('p', { class: 'none', text: 'Add somebody to the crew first.' });
 
   var body = make('div', { class: 'pad' },
-    make('div', { class: 'field' }, make('label', { for: 'job-customer', text: 'Customer' }), customer),
+    make('div', { class: 'field' },
+      make('label', { for: 'job-known', text: 'Who is it for?' }), known),
+    typed,
     make('div', { class: 'field' }, make('label', { for: 'job-address', text: 'Address' }), address),
     make('div', { class: 'two', style: 'margin-bottom:13px' },
       make('div', {}, make('label', { for: 'job-phone', text: 'Their phone' }), phone),
@@ -335,10 +658,14 @@ function jobForm(job) {
         var ids = Array.prototype.slice.call(body.querySelectorAll('input[type=checkbox]:checked'))
           .map(function (i) { return Number(i.value); });
 
-        if (!customer.value.trim()) { say('Put the customer name in.', 'bad'); return; }
+        if (!known.value && !customer.value.trim()) {
+          say('Pick a customer or type a name.', 'bad');
+          return;
+        }
         if (!ids.length) { say('Tick who is going.', 'bad'); return; }
 
         var payload = {
+          customer_id: known.value ? Number(known.value) : null,
           customer: customer.value.trim(),
           address: address.value.trim(),
           phone: phone.value.trim(),
@@ -565,6 +892,7 @@ function paintPay(sheet) {
             make('th', { class: 'r', text: "OK'd" }),
             make('th', { class: 'r', text: 'Waiting' }),
             make('th', { class: 'r', text: 'Hours' }),
+            make('th', { class: 'r', text: 'Over 40' }),
             make('th', { class: 'r', text: 'Pay' }))),
           make('tbody', {}, rows.map(function (r) {
             return make('tr', {},
@@ -574,6 +902,8 @@ function paintPay(sheet) {
               make('td', { class: 'r', text: r.ok_hours.toFixed(2) }),
               make('td', { class: 'r', text: r.waiting_hours.toFixed(2) }),
               make('td', { class: 'r', text: r.hours.toFixed(2) }),
+              make('td', { class: 'r', style: r.over_40 > 0 ? 'color:var(--ask-ink);font-weight:700' : 'color:var(--ink-soft)',
+                text: r.over_40 > 0 ? r.over_40.toFixed(2) : '—' }),
               make('td', { class: 'r', text: CASH.format(r.pay) }));
           })),
           make('tfoot', {}, make('tr', {},
@@ -582,9 +912,38 @@ function paintPay(sheet) {
             make('td', { class: 'r', text: view.data.totals.ok_hours.toFixed(2) }),
             make('td', {}),
             make('td', { class: 'r', text: view.data.totals.hours.toFixed(2) }),
+            make('td', { class: 'r', text: view.data.totals.over_40 > 0
+              ? view.data.totals.over_40.toFixed(2) : '—' }),
             make('td', { class: 'r', text: CASH.format(view.data.totals.pay) })))))
       : make('div', { class: 'pad' },
           make('p', { class: 'none', text: 'No hours over those dates.' }))));
+
+  if (view.data.days === 7 && view.data.totals.over_40 > 0) {
+    sheet.appendChild(make('div', { class: 'flash bad' },
+      view.data.totals.over_40.toFixed(2) + ' hours past forty this week. Check before you run it.'));
+  }
+
+  var parts = view.data.parts || [];
+
+  sheet.appendChild(panel('Parts used over those dates',
+    parts.length ? [make('span', { class: 'pip', text: String(parts.length) + ' jobs' })] : [],
+    parts.length
+      ? make('div', { class: 'scroller' }, make('table', {},
+          make('thead', {}, make('tr', {},
+            make('th', { text: 'Day' }),
+            make('th', { text: 'Customer' }),
+            make('th', { text: 'Work' }),
+            make('th', { text: 'What went in' }))),
+          make('tbody', {}, parts.map(function (row) {
+            return make('tr', {},
+              make('td', { text: shortDate(row.job_date) }),
+              make('td', { text: row.customer }),
+              make('td', {}, kindChip(row.kind)),
+              make('td', { style: 'white-space:normal', text: row.materials }));
+          }))))
+      : make('div', { class: 'pad' },
+          make('p', { class: 'none',
+            text: 'Nothing recorded. The crew add parts when they mark a job finished.' }))));
 
   var shifts = view.data.shifts || [];
 
@@ -608,13 +967,33 @@ TABS.forEach(function (t) {
   document.getElementById('tab-' + t).addEventListener('click', function () { goTab(t); });
 });
 
+var hunt = document.getElementById('search');
+var huntTimer = null;
+
+hunt.addEventListener('input', function () {
+  clearTimeout(huntTimer);
+  var term = hunt.value.trim();
+
+  // Wait for them to stop typing rather than asking on every keystroke.
+  huntTimer = setTimeout(function () {
+    if (term.length < 2) {
+      if (view.hunting) { view.hunting = null; markTab(); load(); }
+      return;
+    }
+    view.hunting = term;
+    view.openCustomer = null;
+    markTab();
+    load();
+  }, 250);
+});
+
 document.getElementById('signout').appendChild(signOutButton());
 
 api('/api/me').then(function (r) {
   if (r.user.role !== 'office') { location.replace('/crew.html'); return; }
   view.me = r.user;
   document.getElementById('me').textContent = r.user.name;
-  return loadPeople().then(load);
+  return load();
 }).catch(function (err) {
   document.getElementById('sheet').textContent = err.message;
 });

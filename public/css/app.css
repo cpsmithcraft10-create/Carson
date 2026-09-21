@@ -188,6 +188,78 @@ body {
 
 .top button.plain:hover { background: rgba(255, 255, 255, .2); }
 
+/* Search sits in the company bar, reachable from every screen. */
+.hunt {
+  width: auto;
+  flex: 1 1 200px;
+  max-width: 300px;
+  min-height: 38px;
+  padding: 7px 13px;
+  font-size: var(--t-small);
+  color: var(--brand-in);
+  background: rgba(255, 255, 255, .11);
+  border: 1px solid rgba(255, 255, 255, .28);
+  border-radius: 999px;
+}
+
+.hunt::placeholder { color: var(--brand-in); opacity: .55; }
+.hunt:focus { background: rgba(255, 255, 255, .18); }
+@media (max-width: 720px) { .hunt { display: none; } }
+
+/* The week, seven columns of it. */
+.weekgrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(148px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border-top: 1px solid var(--line);
+}
+
+.weekday { background: var(--sheet); padding: var(--s3); min-height: 130px; }
+.weekday.is-today { background: var(--ok-bg); }
+.weekday.weekend { background: var(--sunk); }
+
+.weekday h4 {
+  margin: 0 0 var(--s2);
+  font-family: var(--head);
+  font-size: var(--t-small);
+  font-weight: 600;
+}
+
+.weekday h4 span {
+  display: block;
+  font-family: var(--body);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.weekjob {
+  display: block;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 7px 9px;
+  min-height: 0;
+  text-align: left;
+  font-size: var(--t-micro);
+  font-weight: 600;
+  line-height: 1.3;
+  border: 0;
+  border-left: 3px solid var(--line-firm);
+  border-radius: 0 5px 5px 0;
+  background: var(--sunk);
+}
+
+.weekjob:hover { background: var(--line); }
+.weekjob.assigned { border-left-color: var(--hold-ink); }
+.weekjob.working  { border-left-color: var(--live-ink); }
+.weekjob.done     { border-left-color: var(--ok-ink); }
+.weekjob em { display: block; font-style: normal; font-weight: 400; color: var(--ink-soft); }
+
+.weekfoot { font-size: 11.5px; color: var(--ink-soft); margin-top: var(--s2); }
+
 /* ================= getting around ================= */
 
 /* One element, two lives: a thumb bar on a phone, a row of tabs on a desk. */

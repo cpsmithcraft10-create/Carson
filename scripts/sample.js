@@ -32,6 +32,28 @@ for (const person of people) {
 const now = today();
 const yesterday = addDays(now, -1);
 
+const customers = [
+  ['Weaver residence', '1420 Oak Hollow Dr', '555-0142',
+    'Gate code 4471. Dog is friendly but loud. Bills quarterly.'],
+  ['Kestrel Ridge HOA', '88 Willow Creek Ct', '555-0188',
+    'Invoice the management company, not the site.'],
+  ['Stoneridge — Mrs. Patel', '15 Stoneridge Way', '555-0115',
+    'Prefers afternoons. Wants the lights on by dark.'],
+  ['Brookside Commons', '210 Brookside Ln', null, null],
+];
+
+const customerId = {};
+for (const [name, address, phone, notes] of customers) {
+  const found = db.prepare('SELECT id FROM customers WHERE name = ?').get(name);
+  if (found) { customerId[name] = found.id; continue; }
+
+  const info = db.prepare(
+    'INSERT INTO customers (name, address, phone, notes) VALUES (?, ?, ?, ?)'
+  ).run(name, address, phone, notes);
+
+  customerId[name] = Number(info.lastInsertRowid);
+}
+
 const jobs = [
   {
     date: now, kind: 'sprinkler', customer: 'Weaver residence',
@@ -61,8 +83,9 @@ const jobs = [
 
 const jobIds = [];
 const addJob = db.prepare(`
-  INSERT INTO jobs (job_date, kind, customer, address, phone, details, est_hours, created_by)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO jobs (job_date, kind, customer, address, phone, customer_id, details,
+                    est_hours, created_by)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const addCrew = db.prepare('INSERT INTO crew_on_job (job_id, employee_id) VALUES (?, ?)');
 
@@ -73,7 +96,7 @@ for (const job of jobs) {
   if (already) { jobIds.push(already.id); continue; }
 
   const info = addJob.run(job.date, job.kind, job.customer, job.address, job.phone,
-    job.details, job.est, id.office);
+    customerId[job.customer] || null, job.details, job.est, id.office);
   const jobId = Number(info.lastInsertRowid);
 
   for (const who of job.crew) addCrew.run(jobId, id[who]);
