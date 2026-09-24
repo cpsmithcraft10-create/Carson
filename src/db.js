@@ -131,6 +131,63 @@ CREATE TABLE IF NOT EXISTS invoices (
 
 CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
 
+-- Work quoted but not yet won. The top of the funnel: an owner needs to
+-- know what is out there as much as what is booked.
+CREATE TABLE IF NOT EXISTS quotes (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id  INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+  customer     TEXT    NOT NULL,
+  address      TEXT,
+  phone        TEXT,
+  kind         TEXT    NOT NULL DEFAULT 'other'
+                       CHECK (kind IN ('sprinkler', 'lighting', 'drainage', 'other')),
+  title        TEXT,
+  details      TEXT,
+  status       TEXT    NOT NULL DEFAULT 'draft'
+                       CHECK (status IN ('draft', 'sent', 'accepted', 'declined', 'expired')),
+  valid_until  TEXT,
+  sent_at      TEXT,
+  decided_at   TEXT,
+  why_lost     TEXT,
+  job_id       INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  created_by   INTEGER REFERENCES employees(id),
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(status);
+CREATE INDEX IF NOT EXISTS idx_quotes_customer ON quotes(customer_id);
+
+CREATE TABLE IF NOT EXISTS quote_lines (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  quote_id    INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+  description TEXT    NOT NULL,
+  qty         REAL    NOT NULL DEFAULT 1,
+  unit_price  REAL    NOT NULL DEFAULT 0,
+  sort_order  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_quote_lines_quote ON quote_lines(quote_id);
+
+-- Money out. Against a job where it belongs to one, against the business
+-- where it does not. Without this the app can only ever show half the story.
+CREATE TABLE IF NOT EXISTS expenses (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  spent_on    TEXT    NOT NULL,
+  kind        TEXT    NOT NULL DEFAULT 'other'
+                      CHECK (kind IN ('materials', 'fuel', 'equipment', 'subcontractor',
+                                      'vehicle', 'insurance', 'other')),
+  description TEXT    NOT NULL,
+  amount      REAL    NOT NULL DEFAULT 0,
+  supplier    TEXT,
+  job_id      INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  billable    INTEGER NOT NULL DEFAULT 0,
+  created_by  INTEGER REFERENCES employees(id),
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(spent_on);
+CREATE INDEX IF NOT EXISTS idx_expenses_job ON expenses(job_id);
+
 CREATE TABLE IF NOT EXISTS sessions (
   token       TEXT PRIMARY KEY,
   employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,

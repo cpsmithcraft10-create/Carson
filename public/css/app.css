@@ -1594,3 +1594,39 @@ body.crew .needsyou {
 }
 
 body.crew .needsyou b { font-size: var(--t-lead); }
+
+/* Twelve destinations want grouping, or the rail is a long list you read
+   top to bottom every time. */
+.railgroup {
+  margin: var(--s4) 0 var(--s1);
+  padding: 0 10px;
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.railgroup:first-child { margin-top: var(--s2); }
+
+/* On a phone the rail is a bar across the bottom, where headings make no
+   sense and there is no room for them. */
+@media (max-width: 959px) { .railgroup { display: none; } }
+body.crew .railgroup { display: none; }
+
+/* A figure that can be negative should look it. */
+.down { color: var(--danger); }
+.up   { color: var(--done); }
+
+/* A bar showing one row's share of the biggest, for a table of money. */
+.share {
+  display: block;
+  height: 5px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--brand-line);
+}
+
+.share i { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
+.share.loss { background: var(--danger-line); }
+.share.loss i { background: var(--danger); }

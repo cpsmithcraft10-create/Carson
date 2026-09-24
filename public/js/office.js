@@ -3,7 +3,8 @@
 /* The office screen. Hand out work, keep an eye on the day, OK hours, post
    announcements, run payroll. */
 
-var TABS = ['today', 'week', 'hours', 'jobs', 'customers', 'billing', 'notices', 'crew', 'pay'];
+var TABS = ['today', 'week', 'jobs', 'hours', 'quotes', 'billing', 'expenses',
+  'reports', 'pay', 'customers', 'crew', 'notices'];
 
 var view = {
   me: null,
@@ -17,6 +18,15 @@ var view = {
   billTo: today(),
   billOpen: null,     // the job whose prices are being edited
   billKeys: false,    // the QuickBooks settings panel is open
+  quoteShow: 'all',   // which quotes are listed
+  quoteOpen: null,    // the quote being written or edited
+  quoteDraft: null,   // its lines, while they are being typed
+  spendFrom: shiftDate(today(), -30),
+  spendTo: today(),
+  spendNew: false,
+  repFrom: shiftDate(today(), -180),
+  repTo: today(),
+  recentJobs: null,   // cached for the expense form's job picker
   people: [],
   customers: [],
   openCustomer: null,
@@ -50,6 +60,13 @@ function fetchTab() {
   if (view.tab === 'billing') {
     return api('/api/office/billing?from=' + view.billFrom + '&to=' + view.billTo);
   }
+  if (view.tab === 'quotes') return api('/api/office/quotes?status=' + view.quoteShow);
+  if (view.tab === 'expenses') {
+    return api('/api/office/expenses?from=' + view.spendFrom + '&to=' + view.spendTo);
+  }
+  if (view.tab === 'reports') {
+    return api('/api/office/reports?from=' + view.repFrom + '&to=' + view.repTo);
+  }
   if (view.tab === 'notices') return api('/api/office/notices');
   if (view.tab === 'crew') return api('/api/office/people?include_past=1');
 
@@ -66,6 +83,8 @@ function load() {
   var also = [];
   if (view.tab === 'jobs') also.push(ensurePeople(), ensureCustomers());
   if (view.tab === 'pay') also.push(ensurePeople());
+  if (view.tab === 'quotes') also.push(ensureCustomers());
+  if (view.tab === 'expenses') also.push(ensureRecentJobs());
 
   return Promise.all([fetchTab()].concat(also)).then(function (all) {
     var data = all[0];
@@ -103,6 +122,20 @@ function ensureCustomers() {
   return api('/api/office/customers').then(function (r) { view.customers = r.customers; });
 }
 
+/* The expense form needs something to hang a cost on. Recent work is
+   enough — nobody files a receipt against a job from last spring. */
+function ensureRecentJobs() {
+  if (view.recentJobs) return Promise.resolve();
+  var from = shiftDate(today(), -60);
+  return api('/api/office/jobs?from=' + from + '&to=' + shiftDate(today(), 14))
+    .then(function (r) {
+      view.recentJobs = (r.jobs || []).slice().sort(function (a, b) {
+        return b.job_date.localeCompare(a.job_date);
+      });
+    })
+    .catch(function () { view.recentJobs = []; });
+}
+
 function say(message, kind) {
   view.flash = message ? { message: message, kind: kind || 'good' } : null;
   paint();
@@ -120,6 +153,9 @@ function goTab(tab) {
   view.flash = null;
   view.editingJob = null;
   view.openCustomer = null;
+  view.quoteOpen = null;
+  view.quoteDraft = null;
+  view.spendNew = false;
   view.bringingIn = false;
   view.bringText = '';
   view.bringFill = 'skip';
@@ -183,6 +219,9 @@ function paint() {
     jobs: paintJobs,
     customers: paintCustomers,
     billing: paintBilling,
+    quotes: paintQuotes,
+    expenses: paintExpenses,
+    reports: paintReports,
     notices: paintNotices,
     crew: paintCrew,
     pay: paintPay,
@@ -496,6 +535,561 @@ function lookedAt(out, send) {
       + ((out.add + out.update) === 1 ? ' customer' : ' customers')));
 
   return lines;
+}
+
+/* -------------------------------- quotes -------------------------------- */
+
+var QUOTE_WORDS = {
+  draft: 'Not sent', sent: 'Out with them', accepted: 'Won', declined: 'Lost', expired: 'Expired',
+};
+
+function paintQuotes(sheet) {
+  var d = view.data;
+  var w = d.summary;
+
+  sheet.appendChild(make('div', { class: 'card' }, figures([
+    { value: String(w.open), label: 'out with customers' },
+    { value: CASH.format(w.open_value), label: 'still to hear on' },
+    { value: String(w.won), label: 'won' },
+    { value: w.pct == null ? '—' : w.pct.toFixed(0) + '%', label: 'win rate' },
+  ])));
+
+  if (view.quoteOpen !== null) { sheet.appendChild(quoteForm()); return; }
+
+  var pick = make('select', { id: 'q-show' },
+    [['all', 'Everything'], ['open', 'Still open'], ['sent', 'Out with them'],
+     ['accepted', 'Won'], ['declined', 'Lost']].map(function (o) {
+      return make('option', { value: o[0] }, o[1]);
+    }));
+  pick.value = view.quoteShow;
+  pick.addEventListener('change', function () { view.quoteShow = pick.value; load(); });
+
+  sheet.appendChild(panel('Quotes', [
+    pick,
+    make('button', { class: 'go slim', style: 'margin:0', onclick: function () {
+      view.quoteOpen = 0;
+      view.quoteDraft = [{ description: '', qty: 1, unit_price: 0 }];
+      paint();
+      window.scrollTo(0, 0);
+    } }, 'Write a quote'),
+  ],
+    d.quotes.length
+      ? make('ul', { class: 'jobs tight' }, d.quotes.map(quoteRow))
+      : make('div', { class: 'pad' },
+          make('p', { class: 'none', text: 'Nothing here yet. Write one and it turns up.' }))));
+}
+
+function quoteRow(q) {
+  var state = q.status === 'accepted' ? 'done'
+    : (q.status === 'declined' ? 'assigned' : 'working');
+
+  var meta = make('p', { class: 'metaline' }, kindChip(q.kind));
+  var add = function (bit) {
+    if (!bit) return;
+    if (meta.childNodes.length) meta.appendChild(make('span', { class: 'gap', text: '·' }));
+    meta.appendChild(bit);
+  };
+  add(make('span', { text: q.lines.length + (q.lines.length === 1 ? ' line' : ' lines') }));
+  if (q.valid_until) add(make('span', { text: 'good until ' + shortDate(q.valid_until) }));
+  if (q.address) add(make('span', { text: q.address }));
+
+  var acts = make('div', { class: 'acts' });
+
+  if (q.status === 'draft') {
+    acts.appendChild(make('button', { class: 'lead', onclick: function () {
+      then(api('/api/office/quotes/' + q.id + '/send', { method: 'POST' }), 'Marked as sent.');
+    } }, 'Mark as sent'));
+  }
+
+  if (q.status === 'draft' || q.status === 'sent') {
+    acts.appendChild(make('button', { onclick: function () {
+      view.quoteOpen = q.id;
+      view.quoteDraft = q.lines.map(function (l) {
+        return { description: l.description, qty: l.qty, unit_price: l.unit_price };
+      });
+      paint();
+      window.scrollTo(0, 0);
+    } }, 'Edit'));
+
+    acts.appendChild(make('button', { onclick: function () { winQuote(q); } }, 'They said yes'));
+    acts.appendChild(make('button', { onclick: function () {
+      var why = prompt('Why did we lose it? (can be left empty)', '');
+      if (why === null) return;
+      then(api('/api/office/quotes/' + q.id + '/decline', {
+        method: 'POST', body: { why_lost: why.trim() },
+      }), 'Marked as lost.');
+    } }, 'They said no'));
+
+    acts.appendChild(make('button', { class: 'risky', onclick: function () {
+      if (!confirm('Throw this quote away?')) return;
+      then(api('/api/office/quotes/' + q.id, { method: 'DELETE' }), 'Thrown away.');
+    } }, 'Delete'));
+  }
+
+  if (q.status === 'accepted' && q.job_id) {
+    acts.appendChild(make('button', { onclick: function () {
+      view.editingJob = q.job_id;
+      goTab('jobs');
+    } }, 'Open the job'));
+  }
+
+  return make('li', {}, make('div', { class: 'bar ' + state }), make('div', {},
+    make('div', { class: 'headline' },
+      make('h3', { text: q.customer }),
+      make('span', { class: 'progress ' + state, text: QUOTE_WORDS[q.status] || q.status }),
+      make('span', { class: 'num', style: 'margin-left:auto;font-weight:650',
+        text: CASH.format(q.total) })),
+    q.title && make('p', { class: 'jobdetail', style: 'margin-top:3px', text: q.title }),
+    meta,
+    q.why_lost && make('p', { class: 'asked', text: 'Lost: ' + q.why_lost }),
+    acts));
+}
+
+/** Winning a quote needs a day and a crew, because it becomes real work. */
+function winQuote(q) {
+  ensurePeople().then(function () {
+    var when = prompt('What day is the work? (like ' + today() + ')', today());
+    if (when === null) return;
+
+    var crew = view.people.filter(function (p) { return p.role !== 'office' && p.active; });
+    if (!crew.length) { say('Add somebody to the team first.', 'bad'); return; }
+
+    var names = crew.map(function (p, i) { return (i + 1) + ' ' + p.name; }).join(', ');
+    var who = prompt('Who is going? Type the numbers, separated by commas.\n' + names, '1');
+    if (who === null) return;
+
+    var ids = who.split(',').map(function (n) {
+      var at = parseInt(n.trim(), 10) - 1;
+      return crew[at] ? crew[at].id : null;
+    }).filter(Boolean);
+
+    if (!ids.length) { say('Nobody picked, so the job was not put on.', 'bad'); return; }
+
+    then(api('/api/office/quotes/' + q.id + '/accept', {
+      method: 'POST', body: { job_date: when.trim(), crew_ids: ids },
+    }), 'Won. The work is on the board for ' + when.trim() + '.');
+  });
+}
+
+function quoteForm() {
+  var editing = view.quoteOpen > 0;
+  var found = editing && (view.data.quotes || []).filter(function (q) {
+    return q.id === view.quoteOpen;
+  })[0];
+
+  var who = make('input', { id: 'q-customer', maxlength: '120', placeholder: 'Weaver residence',
+    value: found ? found.customer : '' });
+  var where = make('input', { id: 'q-address', maxlength: '200', placeholder: '1420 Oak Hollow Dr',
+    value: found && found.address ? found.address : '' });
+  var title = make('input', { id: 'q-title', maxlength: '160',
+    placeholder: 'Zone 3 overhaul', value: found && found.title ? found.title : '' });
+  var until = make('input', { type: 'date', id: 'q-until',
+    value: found && found.valid_until ? found.valid_until : shiftDate(today(), 30) });
+  var details = make('textarea', { id: 'q-details', maxlength: '4000',
+    placeholder: 'What the work covers, and anything they should know.' },
+    found && found.details ? found.details : '');
+
+  var kind = make('select', { id: 'q-kind' },
+    ['sprinkler', 'lighting', 'drainage', 'other'].map(function (k) {
+      return make('option', { value: k }, KIND_WORDS[k]);
+    }));
+  kind.value = found ? found.kind : 'sprinkler';
+
+  var known = make('select', { id: 'q-known' },
+    [make('option', { value: '' }, 'Somebody new')].concat(
+      view.customers.map(function (c) { return make('option', { value: c.id }, c.name); })));
+  known.value = found && found.customer_id ? found.customer_id : '';
+  known.addEventListener('change', function () {
+    var pick = view.customers.filter(function (c) {
+      return String(c.id) === known.value;
+    })[0];
+    if (!pick) return;
+    who.value = pick.name;
+    where.value = pick.address || '';
+  });
+
+  var lines = make('div');
+  var sum = make('p', { class: 'reassure', style: 'margin-top:0' });
+
+  var retotal = function () {
+    var total = view.quoteDraft.reduce(function (t, l) {
+      return t + (Number(l.qty) || 0) * (Number(l.unit_price) || 0);
+    }, 0);
+    emptyOut(sum);
+    sum.append('That quote comes to ',
+      make('b', { text: CASH.format(Math.round(total * 100) / 100) }), '.');
+  };
+
+  var drawLines = function () {
+    emptyOut(lines);
+
+    view.quoteDraft.forEach(function (line, at) {
+      var what = make('input', { maxlength: '300', placeholder: 'What the work is',
+        value: line.description });
+      var qty = make('input', { type: 'number', min: '0', step: '0.5',
+        value: String(line.qty), style: 'max-width:90px' });
+      var price = make('input', { type: 'number', min: '0', step: '0.01',
+        value: String(line.unit_price), style: 'max-width:120px' });
+
+      what.addEventListener('input', function () { line.description = what.value; });
+      qty.addEventListener('input', function () { line.qty = Number(qty.value) || 0; retotal(); });
+      price.addEventListener('input', function () {
+        line.unit_price = Number(price.value) || 0;
+        retotal();
+      });
+
+      lines.appendChild(make('div', {
+        style: 'display:flex;gap:8px;align-items:flex-end;margin-bottom:8px;flex-wrap:wrap',
+      },
+        make('div', { style: 'flex:1 1 220px' },
+          at === 0 && make('label', { text: 'What the work is' }), what),
+        make('div', {}, at === 0 && make('label', { text: 'How many' }), qty),
+        make('div', {}, at === 0 && make('label', { text: 'Each' }), price),
+        make('button', {
+          class: 'slim risky', style: 'margin:0;min-width:40px',
+          'aria-label': 'Take this line off',
+          onclick: function () {
+            if (view.quoteDraft.length === 1) { say('A quote needs a line.', 'bad'); return; }
+            view.quoteDraft.splice(at, 1);
+            drawLines();
+            retotal();
+          },
+        }, '×')));
+    });
+
+    lines.appendChild(make('button', { class: 'slim', style: 'width:auto', onclick: function () {
+      view.quoteDraft.push({ description: '', qty: 1, unit_price: 0 });
+      drawLines();
+      retotal();
+    } }, 'Add another line'));
+  };
+
+  drawLines();
+  retotal();
+
+  var body = make('div', { class: 'pad' },
+    view.customers.length > 0 && make('div', { class: 'field' },
+      make('label', { for: 'q-known', text: 'Who is it for?' }), known),
+    make('div', { class: 'two', style: 'margin-bottom:12px' },
+      make('div', {}, make('label', { for: 'q-customer', text: 'Customer' }), who),
+      make('div', {}, make('label', { for: 'q-kind', text: 'Type of work' }), kind)),
+    make('div', { class: 'field' }, make('label', { for: 'q-address', text: 'Address' }), where),
+    make('div', { class: 'two', style: 'margin-bottom:12px' },
+      make('div', {}, make('label', { for: 'q-title', text: 'What to call it' }), title),
+      make('div', {}, make('label', { for: 'q-until', text: 'Good until' }), until)),
+    make('div', { class: 'field' },
+      make('label', { for: 'q-details', text: 'What it covers' }), details),
+    make('div', { class: 'field' }, make('label', { text: 'The price' }), lines),
+    sum,
+    make('div', { class: 'inline' },
+      make('button', { class: 'go', onclick: function () {
+        if (!who.value.trim()) { say('Put the customer name in.', 'bad'); return; }
+        var rows = view.quoteDraft.filter(function (l) { return l.description.trim(); });
+        if (!rows.length) { say('Put at least one line on it.', 'bad'); return; }
+
+        var payload = {
+          customer: who.value.trim(),
+          customer_id: known.value || null,
+          address: where.value.trim(),
+          kind: kind.value,
+          title: title.value.trim(),
+          details: details.value.trim(),
+          valid_until: until.value || null,
+          lines: rows,
+        };
+
+        view.quoteOpen = null;
+        view.quoteDraft = null;
+
+        then(editing
+          ? api('/api/office/quotes/' + found.id, { method: 'PATCH', body: payload })
+          : api('/api/office/quotes', { method: 'POST', body: payload }),
+        editing ? 'Quote updated.' : 'Quote written.');
+      } }, editing ? 'Save the quote' : 'Save the quote'),
+      make('button', { onclick: function () {
+        view.quoteOpen = null;
+        view.quoteDraft = null;
+        paint();
+      } }, 'Never mind')));
+
+  return panel(editing ? 'Edit quote' : 'New quote', [], body);
+}
+
+/* ------------------------------- expenses ------------------------------- */
+
+var SPEND_WORDS = {
+  materials: 'Materials', fuel: 'Fuel', equipment: 'Equipment',
+  subcontractor: 'Subcontractor', vehicle: 'Vehicle', insurance: 'Insurance', other: 'Other',
+};
+
+function paintExpenses(sheet) {
+  var d = view.data;
+
+  sheet.appendChild(make('div', { class: 'card' }, figures([
+    { value: CASH.format(d.totals.spent), label: 'spent' },
+    { value: CASH.format(d.totals.on_jobs), label: 'against jobs' },
+    { value: CASH.format(d.totals.spent - d.totals.on_jobs), label: 'running the business' },
+    { value: String(d.totals.count), label: d.totals.count === 1 ? 'entry' : 'entries' },
+  ])));
+
+  sheet.appendChild(datesCard('spendFrom', 'spendTo', d.from, d.to));
+
+  if (view.spendNew) sheet.appendChild(spendForm());
+
+  sheet.appendChild(panel('What went out', [
+    !view.spendNew && make('button', { class: 'go slim', style: 'margin:0',
+      onclick: function () { view.spendNew = true; paint(); } }, 'Put one in'),
+  ].filter(Boolean),
+    d.expenses.length
+      ? make('div', { class: 'scroller' }, make('table', {},
+          make('thead', {}, make('tr', {},
+            make('th', { text: 'Day' }),
+            make('th', { text: 'What for' }),
+            make('th', { text: 'Kind' }),
+            make('th', { text: 'Against' }),
+            make('th', { class: 'r', text: 'Amount' }),
+            make('th', { text: '' }))),
+          make('tbody', {}, d.expenses.map(function (e) {
+            return make('tr', {},
+              make('td', { text: shortDate(e.spent_on) }),
+              make('td', {},
+                make('b', { text: e.description }),
+                e.supplier && make('span', { class: 'clock', style: 'display:block',
+                  text: e.supplier })),
+              make('td', { text: SPEND_WORDS[e.kind] || e.kind }),
+              make('td', { text: e.job_customer || '—' }),
+              make('td', { class: 'r', text: CASH.format(e.amount) }),
+              make('td', {}, make('button', {
+                class: 'slim risky', style: 'margin:0',
+                onclick: function () {
+                  if (!confirm('Take this off?')) return;
+                  then(api('/api/office/expenses/' + e.id, { method: 'DELETE' }), 'Taken off.');
+                },
+              }, 'Delete')));
+          }))))
+      : make('div', { class: 'pad' },
+          make('p', { class: 'none', text: 'Nothing down over these dates.' }))));
+}
+
+function spendForm() {
+  var when = make('input', { type: 'date', id: 'x-day', value: today() });
+  var what = make('input', { id: 'x-what', maxlength: '300', placeholder: 'Gravel and pipe' });
+  var amount = make('input', { type: 'number', id: 'x-amount', min: '0', step: '0.01',
+    placeholder: '0.00' });
+  var from = make('input', { id: 'x-from', maxlength: '160', placeholder: 'Cedar Falls Supply' });
+
+  var kind = make('select', { id: 'x-kind' },
+    Object.keys(SPEND_WORDS).map(function (k) {
+      return make('option', { value: k }, SPEND_WORDS[k]);
+    }));
+  kind.value = 'materials';
+
+  var job = make('select', { id: 'x-job' },
+    [make('option', { value: '' }, 'Nothing — it is a business cost')].concat(
+      (view.recentJobs || []).map(function (j) {
+        return make('option', { value: j.id }, shortDate(j.job_date) + ' · ' + j.customer);
+      })));
+
+  return panel('Put money out in', [], make('div', { class: 'pad' },
+    make('div', { class: 'two', style: 'margin-bottom:12px' },
+      make('div', {}, make('label', { for: 'x-day', text: 'When' }), when),
+      make('div', {}, make('label', { for: 'x-kind', text: 'What kind' }), kind)),
+    make('div', { class: 'field' },
+      make('label', { for: 'x-what', text: 'What it was for' }), what),
+    make('div', { class: 'two', style: 'margin-bottom:12px' },
+      make('div', {}, make('label', { for: 'x-amount', text: 'How much' }), amount),
+      make('div', {}, make('label', { for: 'x-from', text: 'Who from' }), from)),
+    make('div', { class: 'field' },
+      make('label', { for: 'x-job', text: 'Against which job?' }), job),
+    make('div', { class: 'inline' },
+      make('button', { class: 'go', onclick: function () {
+        if (!what.value.trim()) { say('Say what it was for.', 'bad'); return; }
+        view.spendNew = false;
+        then(api('/api/office/expenses', {
+          method: 'POST',
+          body: {
+            spent_on: when.value || today(),
+            kind: kind.value,
+            description: what.value.trim(),
+            amount: Number(amount.value) || 0,
+            supplier: from.value.trim(),
+            job_id: job.value || null,
+          },
+        }), 'Put in.').then(function () { view.recentJobs = null; });
+      } }, 'Save it'),
+      make('button', { onclick: function () { view.spendNew = false; paint(); } }, 'Never mind'))));
+}
+
+/* -------------------------------- reports ------------------------------- */
+
+function paintReports(sheet) {
+  var d = view.data;
+  var t = d.totals;
+
+  sheet.appendChild(make('div', { class: 'card' }, figures([
+    { value: CASH.format(t.revenue), label: 'billed' },
+    { value: CASH.format(t.cost + d.overhead), label: 'it cost' },
+    { value: CASH.format(t.margin - d.overhead), label: 'left in the business' },
+    { value: t.margin_pct == null ? '—' : t.margin_pct.toFixed(0) + '%', label: 'margin on jobs' },
+  ])));
+
+  sheet.appendChild(datesCard('repFrom', 'repTo', d.from, d.to));
+
+  // ---- month by month ---------------------------------------------------
+  sheet.appendChild(panel('Month by month', [], d.months.length
+    ? make('div', { class: 'scroller' }, make('table', {},
+        make('thead', {}, make('tr', {},
+          make('th', { text: 'Month' }),
+          make('th', { class: 'r', text: 'Jobs' }),
+          make('th', { class: 'r', text: 'Hours' }),
+          make('th', { class: 'r', text: 'Billed' }),
+          make('th', { class: 'r', text: 'Wages' }),
+          make('th', { class: 'r', text: 'Bought' }),
+          make('th', { class: 'r', text: 'Running costs' }),
+          make('th', { class: 'r', text: 'Left over' }))),
+        make('tbody', {}, d.months.map(function (m) {
+          return make('tr', {},
+            make('td', { text: monthWords(m.month) }),
+            make('td', { class: 'r', text: String(m.jobs) }),
+            make('td', { class: 'r', text: m.hours.toFixed(2) }),
+            make('td', { class: 'r', text: CASH.format(m.revenue) }),
+            make('td', { class: 'r', text: CASH.format(m.labour) }),
+            make('td', { class: 'r', text: CASH.format(m.spend) }),
+            make('td', { class: 'r', text: CASH.format(m.overhead) }),
+            make('td', { class: 'r ' + (m.margin < 0 ? 'down' : 'up'),
+              style: 'font-weight:650', text: CASH.format(m.margin) }));
+        }))))
+    : make('div', { class: 'pad' },
+        make('p', { class: 'none', text: 'No work over these dates.' }))));
+
+  // ---- who pays the bills ----------------------------------------------
+  sheet.appendChild(panel('Best customers', [], d.customers.length
+    ? make('div', { class: 'pad' }, make('ul', { class: 'facts' }, d.customers.map(function (c) {
+        var top = d.customers[0].revenue || 1;
+        return make('li', {},
+          make('span', { class: 'tag', text: c.customer }),
+          make('span', {},
+            make('span', {},
+              make('b', { text: CASH.format(c.revenue) }),
+              make('span', { class: 'clock', text: '  ' + c.jobs
+                + (c.jobs === 1 ? ' job' : ' jobs') + '  ·  '
+                + CASH.format(c.margin) + ' left over' })),
+            make('span', { class: 'share' + (c.margin < 0 ? ' loss' : '') },
+              make('i', { style: 'width:' + Math.max(2, (c.revenue / top) * 100) + '%' }))));
+      })))
+    : make('div', { class: 'pad' }, make('p', { class: 'none', text: 'Nothing yet.' }))));
+
+  // ---- which trade earns -------------------------------------------------
+  sheet.appendChild(panel('By trade', [], d.kinds.length
+    ? make('div', { class: 'scroller' }, make('table', {},
+        make('thead', {}, make('tr', {},
+          make('th', { text: 'Work' }),
+          make('th', { class: 'r', text: 'Jobs' }),
+          make('th', { class: 'r', text: 'Billed' }),
+          make('th', { class: 'r', text: 'Left over' }),
+          make('th', { class: 'r', text: 'Margin' }))),
+        make('tbody', {}, d.kinds.map(function (k) {
+          return make('tr', {},
+            make('td', {}, kindChip(k.kind)),
+            make('td', { class: 'r', text: String(k.jobs) }),
+            make('td', { class: 'r', text: CASH.format(k.revenue) }),
+            make('td', { class: 'r ' + (k.margin < 0 ? 'down' : ''), text: CASH.format(k.margin) }),
+            make('td', { class: 'r',
+              text: k.margin_pct == null ? '—' : k.margin_pct.toFixed(0) + '%' }));
+        }))))
+    : make('div', { class: 'pad' }, make('p', { class: 'none', text: 'Nothing yet.' }))));
+
+  // ---- the crew's time ---------------------------------------------------
+  sheet.appendChild(panel('Where the hours went', [], make('div', { class: 'pad' },
+    make('ul', { class: 'facts' },
+      make('li', {},
+        make('span', { class: 'tag', text: 'On customer jobs' }),
+        make('span', { text: d.crew.on_jobs.toFixed(2) + ' hours' })),
+      make('li', {},
+        make('span', { class: 'tag', text: 'On everything else' }),
+        make('span', { text: d.crew.off_jobs.toFixed(2) + ' hours' })),
+      make('li', {},
+        make('span', { class: 'tag', text: 'Chargeable' }),
+        make('span', { text: d.crew.pct == null ? '—' : d.crew.pct.toFixed(0)
+          + '% of the hours you paid for' }))))));
+
+  // ---- quoting -----------------------------------------------------------
+  sheet.appendChild(panel('Quoting', [], make('div', { class: 'pad' },
+    make('ul', { class: 'facts' },
+      make('li', {},
+        make('span', { class: 'tag', text: 'Won' }),
+        make('span', { text: d.quotes.won + ' of ' + (d.quotes.won + d.quotes.lost)
+          + ' decided · ' + CASH.format(d.quotes.won_value) })),
+      make('li', {},
+        make('span', { class: 'tag', text: 'Still out' }),
+        make('span', { text: d.quotes.open + ' worth ' + CASH.format(d.quotes.open_value) })),
+      make('li', {},
+        make('span', { class: 'tag', text: 'Win rate' }),
+        make('span', { text: d.quotes.pct == null ? 'Nothing decided yet'
+          : d.quotes.pct.toFixed(0) + '%' }))))));
+
+  // ---- what to look at ---------------------------------------------------
+  if (d.worst.length) {
+    sheet.appendChild(panel('Jobs that lost money', [
+      make('span', { class: 'pip', text: String(d.worst.length) }),
+    ], make('ul', { class: 'jobs tight' }, d.worst.map(moneyRow))));
+  }
+
+  if (d.unbilled.length) {
+    sheet.appendChild(panel('Not invoiced yet', [
+      make('span', { class: 'pip', text: String(d.unbilled.length) }),
+    ], make('ul', { class: 'jobs tight' }, d.unbilled.map(moneyRow))));
+  }
+}
+
+function moneyRow(r) {
+  return make('li', {}, make('div', { class: 'bar ' + (r.margin < 0 ? 'assigned' : 'working') }),
+    make('div', {},
+      make('div', { class: 'headline' },
+        make('h3', { text: r.customer }),
+        make('span', { class: 'num ' + (r.margin < 0 ? 'down' : ''),
+          style: 'margin-left:auto;font-weight:650', text: CASH.format(r.margin) })),
+      make('p', { class: 'metaline' },
+        kindChip(r.kind),
+        make('span', { class: 'gap', text: '·' }),
+        make('span', { text: shortDate(r.job_date) }),
+        make('span', { class: 'gap', text: '·' }),
+        make('span', { text: CASH.format(r.revenue) + ' billed against '
+          + CASH.format(r.cost) + ' of cost' })),
+      r.nothing_billed && make('p', { class: 'asked',
+        text: 'Nothing has been billed for this one.' })));
+}
+
+/** A from/to pair that reloads the screen it is on. */
+function datesCard(fromKey, toKey, from, to) {
+  var a = make('input', { type: 'date', id: fromKey, value: from });
+  var b = make('input', { type: 'date', id: toKey, value: to });
+
+  var jump = function (days) {
+    view[toKey] = today();
+    view[fromKey] = shiftDate(today(), -days);
+    load();
+  };
+
+  return panel('Period', [], make('div', { class: 'pad' },
+    make('div', { class: 'two', style: 'margin-bottom:12px' },
+      make('div', {}, make('label', { for: fromKey, text: 'From' }), a),
+      make('div', {}, make('label', { for: toKey, text: 'To' }), b)),
+    make('div', { class: 'inline' },
+      make('button', { class: 'go', onclick: function () {
+        view[fromKey] = a.value || view[fromKey];
+        view[toKey] = b.value || view[toKey];
+        load();
+      } }, 'Apply'),
+      make('button', { onclick: function () { jump(30); } }, 'Last 30 days'),
+      make('button', { onclick: function () { jump(90); } }, 'Last 3 months'),
+      make('button', { onclick: function () { jump(365); } }, 'Last year'))));
+}
+
+function monthWords(key) {
+  var bits = String(key).split('-');
+  return new Date(Date.UTC(+bits[0], +bits[1] - 1, 1))
+    .toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
 /* ------------------------------- billing -------------------------------- */

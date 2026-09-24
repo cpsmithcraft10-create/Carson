@@ -6,14 +6,45 @@ const { HttpError } = require('../http');
 const { today, weekStart, addDays, round2 } = require('../time');
 const {
   loadJobs, loadJob, loadShifts, loadShift, shiftTotals,
-  officeCounts, loadCustomers, loadCustomer,
+  officeCounts, loadCustomers, loadCustomer, loadQuotes, loadQuote, loadExpenses,
 } = require('../queries');
+const money = require('../money');
+const { buildInvoice } = require('../billing');
 const { readCustomers, sameName, MOST_ROWS } = require('../import');
 const settingsStore = require('../settings');
 const invoicing = require('../invoicing');
 const { consentUrl } = require('../quickbooks');
 
 const KINDS = ['sprinkler', 'lighting', 'drainage', 'other'];
+const EXPENSE_KINDS = ['materials', 'fuel', 'equipment', 'subcontractor',
+  'vehicle', 'insurance', 'other'];
+
+function getQuote(db, id) {
+  const quote = loadQuote(db, id);
+  if (!quote) throw new HttpError(404, 'That quote was not found');
+  return quote;
+}
+
+/** Replaces a quote's lines wholesale. Editing them one by one is not worth
+ *  the round trips for a list this short. */
+function putLines(db, quoteId, lines) {
+  if (!Array.isArray(lines)) return;
+
+  db.prepare('DELETE FROM quote_lines WHERE quote_id = ?').run(quoteId);
+
+  const add = db.prepare(`
+    INSERT INTO quote_lines (quote_id, description, qty, unit_price, sort_order)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  lines.slice(0, 60).forEach((line, at) => {
+    const what = v.text(line.description, 'Line', { required: true, max: 300 });
+    add.run(quoteId, what,
+      v.decimal(line.qty, 'Quantity', { max: 100000, fallback: 1 }) || 0,
+      v.decimal(line.unit_price, 'Price', { max: 1000000, fallback: 0 }) || 0,
+      at);
+  });
+}
 
 function getPerson(db, id) {
   const row = db.prepare('SELECT * FROM employees WHERE id = ?').get(id);
@@ -377,6 +408,330 @@ module.exports = [
       }
 
       return { looked: false, ...summary, customers: loadCustomers(db, null) };
+    },
+  },
+
+  // ---- quotes ------------------------------------------------------------
+
+  {
+    method: 'GET',
+    path: '/api/office/quotes',
+    handler({ db, query }) {
+      const want = v.oneOf(query.status, 'Status',
+        ['all', 'open', 'draft', 'sent', 'accepted', 'declined'],
+        { required: false, fallback: 'all' });
+
+      const where = {
+        all: null,
+        open: "q.status IN ('draft', 'sent')",
+        draft: "q.status = 'draft'",
+        sent: "q.status = 'sent'",
+        accepted: "q.status = 'accepted'",
+        declined: "q.status = 'declined'",
+      }[want];
+
+      const quotes = loadQuotes(db, where);
+      const every = where ? loadQuotes(db, null) : quotes;
+
+      return { quotes, showing: want, summary: money.winRate(every) };
+    },
+  },
+
+  {
+    method: 'GET',
+    path: '/api/office/quotes/:id',
+    handler({ db, params }) {
+      const quote = loadQuote(db, v.id(params.id, 'Quote'));
+      if (!quote) throw new HttpError(404, 'That quote was not found');
+      return { quote };
+    },
+  },
+
+  {
+    method: 'POST',
+    path: '/api/office/quotes',
+    handler({ db, user, body }) {
+      const known = body.customer_id
+        ? db.prepare('SELECT * FROM customers WHERE id = ?').get(v.id(body.customer_id, 'Customer'))
+        : null;
+      if (body.customer_id && !known) throw new HttpError(404, 'That customer was not found');
+
+      const customer = v.text(body.customer, 'Customer', { required: !known, max: 120 })
+        || known.name;
+
+      const info = db.prepare(`
+        INSERT INTO quotes (customer_id, customer, address, phone, kind, title, details,
+                            valid_until, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        known ? known.id : null,
+        customer,
+        v.text(body.address, 'Address', { max: 200 }) || (known ? known.address : null),
+        v.text(body.phone, 'Phone', { max: 40 }) || (known ? known.phone : null),
+        v.oneOf(body.kind, 'Type of work', KINDS, { required: false, fallback: 'other' }),
+        v.text(body.title, 'Title', { max: 160 }),
+        v.text(body.details, 'Details', { max: 4000 }),
+        body.valid_until ? v.date(body.valid_until, 'Good until') : null,
+        user.id,
+      );
+
+      const quoteId = Number(info.lastInsertRowid);
+      putLines(db, quoteId, body.lines);
+      return { quote: loadQuote(db, quoteId) };
+    },
+  },
+
+  {
+    method: 'PATCH',
+    path: '/api/office/quotes/:id',
+    handler({ db, params, body }) {
+      const quote = getQuote(db, v.id(params.id, 'Quote'));
+
+      if (quote.status === 'accepted' && body.lines) {
+        throw new HttpError(409, 'That quote has been accepted. Change the job instead.');
+      }
+
+      const next = {
+        customer: body.customer != null
+          ? v.text(body.customer, 'Customer', { required: true, max: 120 }) : quote.customer,
+        address: body.address !== undefined
+          ? v.text(body.address, 'Address', { max: 200 }) : quote.address,
+        phone: body.phone !== undefined ? v.text(body.phone, 'Phone', { max: 40 }) : quote.phone,
+        kind: body.kind != null ? v.oneOf(body.kind, 'Type of work', KINDS) : quote.kind,
+        title: body.title !== undefined ? v.text(body.title, 'Title', { max: 160 }) : quote.title,
+        details: body.details !== undefined
+          ? v.text(body.details, 'Details', { max: 4000 }) : quote.details,
+        valid_until: body.valid_until !== undefined
+          ? (body.valid_until ? v.date(body.valid_until, 'Good until') : null) : quote.valid_until,
+      };
+
+      db.prepare(`
+        UPDATE quotes SET customer = ?, address = ?, phone = ?, kind = ?, title = ?,
+                          details = ?, valid_until = ?
+         WHERE id = ?
+      `).run(next.customer, next.address, next.phone, next.kind, next.title,
+        next.details, next.valid_until, quote.id);
+
+      if (Array.isArray(body.lines)) putLines(db, quote.id, body.lines);
+      return { quote: loadQuote(db, quote.id) };
+    },
+  },
+
+  {
+    method: 'POST',
+    path: '/api/office/quotes/:id/send',
+    handler({ db, params }) {
+      const quote = getQuote(db, v.id(params.id, 'Quote'));
+      if (quote.status !== 'draft') throw new HttpError(409, 'That one has already gone out');
+      if (!quote.lines.length) v.fail('Put at least one line on it first');
+
+      db.prepare("UPDATE quotes SET status = 'sent', sent_at = datetime('now') WHERE id = ?")
+        .run(quote.id);
+
+      return { quote: loadQuote(db, quote.id) };
+    },
+  },
+
+  // Winning a quote is what puts the work on the board, at the price quoted.
+  {
+    method: 'POST',
+    path: '/api/office/quotes/:id/accept',
+    handler({ db, user, params, body }) {
+      const quote = getQuote(db, v.id(params.id, 'Quote'));
+      if (quote.status === 'accepted') return { quote, job: loadJob(db, quote.job_id) };
+      if (quote.status === 'declined') throw new HttpError(409, 'That one was turned down');
+
+      const date = v.date(body.job_date, 'Day for the work');
+      const ids = Array.isArray(body.crew_ids) ? body.crew_ids : [];
+      const crewIds = [...new Set(ids.filter((x) => x != null).map((x) => v.id(x, 'Crew member')))];
+      if (!crewIds.length) v.fail('Pick at least one person for this job');
+
+      const info = db.prepare(`
+        INSERT INTO jobs (job_date, kind, customer, address, phone, customer_id, details,
+                          quoted_price, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(date, quote.kind, quote.customer, quote.address, quote.phone, quote.customer_id,
+        [quote.title, quote.details].filter(Boolean).join(' \u2014 ') || null,
+        quote.total, user.id);
+
+      const jobId = Number(info.lastInsertRowid);
+      setCrew(db, jobId, crewIds);
+
+      db.prepare(`
+        UPDATE quotes SET status = 'accepted', decided_at = datetime('now'), job_id = ?
+         WHERE id = ?
+      `).run(jobId, quote.id);
+
+      return { quote: loadQuote(db, quote.id), job: loadJob(db, jobId) };
+    },
+  },
+
+  {
+    method: 'POST',
+    path: '/api/office/quotes/:id/decline',
+    handler({ db, params, body }) {
+      const quote = getQuote(db, v.id(params.id, 'Quote'));
+      if (quote.status === 'accepted') throw new HttpError(409, 'That one was already won');
+
+      db.prepare(`
+        UPDATE quotes SET status = 'declined', decided_at = datetime('now'), why_lost = ?
+         WHERE id = ?
+      `).run(v.text(body.why_lost, 'Why', { max: 300 }), quote.id);
+
+      return { quote: loadQuote(db, quote.id) };
+    },
+  },
+
+  {
+    method: 'DELETE',
+    path: '/api/office/quotes/:id',
+    handler({ db, params }) {
+      const quote = getQuote(db, v.id(params.id, 'Quote'));
+      if (quote.status === 'accepted') {
+        throw new HttpError(409, 'That one became a job. Take the job off instead.');
+      }
+      db.prepare('DELETE FROM quotes WHERE id = ?').run(quote.id);
+      return { ok: true };
+    },
+  },
+
+  // ---- money out ---------------------------------------------------------
+
+  {
+    method: 'GET',
+    path: '/api/office/expenses',
+    handler({ db, query }) {
+      const from = query.from ? v.date(query.from, 'From') : addDays(today(), -30);
+      const to = query.to ? v.date(query.to, 'To') : today();
+
+      const rows = loadExpenses(db, 'e.spent_on BETWEEN ? AND ?', [from, to]);
+
+      const perKind = {};
+      for (const row of rows) {
+        perKind[row.kind] = round2((perKind[row.kind] || 0) + (Number(row.amount) || 0));
+      }
+
+      return {
+        from,
+        to,
+        expenses: rows,
+        totals: {
+          spent: round2(rows.reduce((t, r) => t + (Number(r.amount) || 0), 0)),
+          on_jobs: round2(rows.filter((r) => r.job_id)
+            .reduce((t, r) => t + (Number(r.amount) || 0), 0)),
+          count: rows.length,
+          by_kind: Object.entries(perKind)
+            .map(([kind, amount]) => ({ kind, amount }))
+            .sort((a, b) => b.amount - a.amount),
+        },
+      };
+    },
+  },
+
+  {
+    method: 'POST',
+    path: '/api/office/expenses',
+    handler({ db, user, body }) {
+      const jobId = body.job_id ? v.id(body.job_id, 'Job') : null;
+      if (jobId && !db.prepare('SELECT id FROM jobs WHERE id = ?').get(jobId)) {
+        throw new HttpError(404, 'That job was not found');
+      }
+
+      const info = db.prepare(`
+        INSERT INTO expenses (spent_on, kind, description, amount, supplier, job_id,
+                              billable, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        v.date(body.spent_on, 'Day'),
+        v.oneOf(body.kind, 'What kind', EXPENSE_KINDS, { required: false, fallback: 'other' }),
+        v.text(body.description, 'What it was for', { required: true, max: 300 }),
+        v.decimal(body.amount, 'Amount', { max: 1000000, fallback: 0 }) || 0,
+        v.text(body.supplier, 'Who from', { max: 160 }),
+        jobId,
+        body.billable ? 1 : 0,
+        user.id,
+      );
+
+      return { expense: loadExpenses(db, 'e.id = ?', [Number(info.lastInsertRowid)])[0] };
+    },
+  },
+
+  {
+    method: 'DELETE',
+    path: '/api/office/expenses/:id',
+    handler({ db, params }) {
+      const id = v.id(params.id, 'Expense');
+      if (!db.prepare('SELECT id FROM expenses WHERE id = ?').get(id)) {
+        throw new HttpError(404, 'That one was not found');
+      }
+      db.prepare('DELETE FROM expenses WHERE id = ?').run(id);
+      return { ok: true };
+    },
+  },
+
+  // ---- where the money went ----------------------------------------------
+
+  {
+    method: 'GET',
+    path: '/api/office/reports',
+    handler({ db, query }) {
+      const from = query.from ? v.date(query.from, 'From') : addDays(today(), -180);
+      const to = query.to ? v.date(query.to, 'To') : today();
+
+      const jobs = db.prepare(`
+        SELECT * FROM jobs WHERE job_date BETWEEN ? AND ? ORDER BY job_date
+      `).all(from, to);
+
+      const shifts = loadShifts(db, 's.work_date BETWEEN ? AND ?', [from, to]);
+      const spend = loadExpenses(db, 'e.spent_on BETWEEN ? AND ?', [from, to]);
+      const settings = settingsStore.all(db);
+
+      const shiftsByJob = new Map();
+      for (const shift of shifts) {
+        if (!shift.job_id) continue;
+        if (!shiftsByJob.has(shift.job_id)) shiftsByJob.set(shift.job_id, []);
+        shiftsByJob.get(shift.job_id).push(shift);
+      }
+
+      const spendByJob = new Map();
+      for (const row of spend) {
+        if (!row.job_id) continue;
+        if (!spendByJob.has(row.job_id)) spendByJob.set(row.job_id, []);
+        spendByJob.get(row.job_id).push(row);
+      }
+
+      const ledger = new Map();
+      for (const row of db.prepare('SELECT * FROM invoices').all()) ledger.set(row.job_id, row);
+
+      const rows = jobs.map((job) => {
+        const own = shiftsByJob.get(job.id) || [];
+        const built = buildInvoice(job, own, settings);
+        return money.jobMoney({
+          job,
+          shifts: own,
+          expenses: spendByJob.get(job.id) || [],
+          invoice: ledger.get(job.id) || null,
+          wouldBill: built.total,
+        });
+      });
+
+      // Anything not against a job is the cost of keeping the doors open.
+      const overheads = spend.filter((row) => !row.job_id);
+
+      return {
+        from,
+        to,
+        totals: money.totalUp(rows),
+        overhead: round2(overheads.reduce((t, r) => t + (Number(r.amount) || 0), 0)),
+        months: money.byMonth(rows, overheads),
+        customers: money.byCustomer(rows, 8),
+        kinds: money.byKind(rows),
+        crew: money.utilisation(shifts),
+        quotes: money.winRate(loadQuotes(db, 'q.created_at BETWEEN ? AND ?',
+          [from, to + ' 23:59:59'])),
+        worst: rows.filter((r) => r.margin < 0).sort((a, b) => a.margin - b.margin).slice(0, 5),
+        unbilled: rows.filter((r) => r.unbilled || r.nothing_billed).slice(0, 10),
+      };
     },
   },
 

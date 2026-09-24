@@ -5,6 +5,7 @@ const { hoursWorked, round2 } = require('./time');
 const JOB_COLUMNS = `
   j.id, j.job_date, j.kind, j.customer, j.address, j.phone, j.customer_id,
   j.details, j.est_hours, j.status, j.wrap_notes, j.materials, j.finished_at,
+  j.quoted_price, j.parts_price, j.no_charge,
   j.created_at, f.name AS finished_by_name
 `;
 
@@ -129,7 +130,71 @@ function loadCustomer(db, id) {
   return loadCustomers(db).find((c) => c.id === Number(id)) || null;
 }
 
+/* ============================== quotes ============================== */
+
+const QUOTE_COLUMNS = `
+  q.id, q.customer_id, q.customer, q.address, q.phone, q.kind, q.title, q.details,
+  q.status, q.valid_until, q.sent_at, q.decided_at, q.why_lost, q.job_id, q.created_at
+`;
+
+function loadQuotes(db, where, params = []) {
+  const rows = db.prepare(`
+    SELECT ${QUOTE_COLUMNS}
+      FROM quotes q
+     ${where ? `WHERE ${where}` : ''}
+     ORDER BY q.created_at DESC, q.id DESC
+  `).all(...params);
+
+  if (!rows.length) return [];
+
+  // One extra trip for every line, rather than one per quote.
+  const lines = db.prepare(`
+    SELECT quote_id, id, description, qty, unit_price, sort_order
+      FROM quote_lines
+     WHERE quote_id IN (${rows.map(() => '?').join(',')})
+     ORDER BY sort_order, id
+  `).all(...rows.map((r) => r.id));
+
+  const byQuote = new Map();
+  for (const line of lines) {
+    if (!byQuote.has(line.quote_id)) byQuote.set(line.quote_id, []);
+    byQuote.get(line.quote_id).push({
+      id: line.id,
+      description: line.description,
+      qty: line.qty,
+      unit_price: line.unit_price,
+      amount: round2((Number(line.qty) || 0) * (Number(line.unit_price) || 0)),
+    });
+  }
+
+  return rows.map((row) => {
+    const own = byQuote.get(row.id) || [];
+    return {
+      ...row,
+      lines: own,
+      total: round2(own.reduce((t, l) => t + l.amount, 0)),
+    };
+  });
+}
+
+function loadQuote(db, id) {
+  return loadQuotes(db, 'q.id = ?', [id])[0] || null;
+}
+
+/* ============================= expenses ============================= */
+
+function loadExpenses(db, where, params = []) {
+  return db.prepare(`
+    SELECT e.*, j.customer AS job_customer, j.job_date AS job_date
+      FROM expenses e
+      LEFT JOIN jobs j ON j.id = e.job_id
+     ${where ? `WHERE ${where}` : ''}
+     ORDER BY e.spent_on DESC, e.id DESC
+  `).all(...params).map((row) => ({ ...row, billable: Boolean(row.billable) }));
+}
+
 module.exports = {
+  loadQuotes, loadQuote, loadExpenses,
   loadJobs, loadJob, loadShifts, loadShift, shapeShift, shiftTotals,
   officeCounts, loadCustomers, loadCustomer,
 };

@@ -84,8 +84,18 @@ They can also:
   sits at the top in colour, and see who has actually read it.
 - **The crew** — add people, change rates, set a new sign-in number, take
   somebody off (their hours are kept, they just cannot sign in).
+- **Quotes** — work priced but not yet won, line by line, with a running
+  total as you type. Mark one won and it goes straight on the board at the
+  price quoted; mark one lost and it says why. The win rate keeps itself.
 - **Billing** — every finished job, what it comes to, and whether it is in
   QuickBooks yet. See below.
+- **Expenses** — money out, against a job where it belongs to one and against
+  the business where it does not.
+- **Reports** — the one screen that answers *did we make money, and where*.
+  Month by month with wages, materials and running costs taken out; your best
+  customers; which trade actually earns; how much of the hours you paid for
+  were chargeable; and two lists nobody enjoys but everybody needs — jobs that
+  lost money, and work that has not been invoiced.
 - **Payroll** — totals per person over any dates, with pay from their rate,
   **anything over 40 hours flagged**, a day-by-day breakdown, a roll-up of
   every part used over the period for billing, and a CSV for whoever does the
@@ -159,6 +169,24 @@ QuickBooks Online as an invoice against that customer.
 
 The keys and tokens live in the `settings` table on your own server and are
 never sent back out to the browser.
+
+## Knowing where the money went
+
+The app knew what it charged and what it paid people. It never put the two
+side by side, so the number an owner actually needs — what a job left in the
+business after the crew and the parts were paid for — did not exist. It does
+now, on **Reports**.
+
+- **Revenue** is what was invoiced where an invoice has gone, and what *would*
+  be invoiced where one has not — flagged either way, so a margin never
+  quietly counts money nobody has asked for yet.
+- **Labour** is what the crew were paid for the hours against that job,
+  including hours still waiting to be approved. The wage is owed whether or
+  not anybody has signed the timesheet off.
+- **Costs against a job** come off that job. **Costs that belong to no job** —
+  insurance, fuel, the truck — come off the month, or the margin flatters
+  itself.
+- **A loss shows as a loss.** No job is rounded up to zero.
 
 ## Things worth knowing
 
@@ -258,7 +286,7 @@ Back up `data/custom-outdoor.db` — that one file is every hour anybody worked.
 npm test
 ```
 
-89 tests covering the hours arithmetic (breaks, work past midnight, rounding),
+116 tests covering the hours arithmetic (breaks, work past midnight, rounding),
 a whole day from giving out a job through to payroll, two people on one job,
 work that was never on a list, announcements and who read them, a job running
 over two days, customers and their history, putting a job out again week after
@@ -275,6 +303,12 @@ QuickBooks that lives in a variable: the invoice body Intuit is handed, the
 token refresh, a customer being created, a missing product, a refusal, and two
 sends racing each other over the same job.
 
+The money half pins down the arithmetic an owner would otherwise have to
+trust: margin on a job that lost money, hours still on the clock not counted
+as cost, overheads coming out of the right month, a month with costs and no
+work, win rate with nothing decided yet, and a quote that was won being
+neither repriced nor deleted behind the job's back.
+
 ## Layout
 
 ```
@@ -289,6 +323,7 @@ src/settings.js      office settings, including the QuickBooks connection
 src/billing.js       working out what a finished job should bill
 src/quickbooks.js    every URL and body shape QuickBooks Online expects
 src/invoicing.js     a finished job, all the way to an invoice
+src/money.js         what a job left in the business, and the roll-ups
 src/routes/          sign-in, crew and office endpoints
 public/index.html    sign in
 public/crew.html     the crew screen
