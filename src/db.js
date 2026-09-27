@@ -223,9 +223,14 @@ function addMissingColumns(db) {
 }
 
 /** Opens (and if needed creates) the database. Pass ':memory:' for tests. */
-function open(file) {
-  const target = file || process.env.DB_FILE
+/** Where the database lives, so backups can be kept beside it. */
+function pathFor(file) {
+  return file || process.env.DB_FILE
     || path.join(__dirname, '..', 'data', 'custom-outdoor.db');
+}
+
+function open(file) {
+  const target = pathFor(file);
 
   if (target !== ':memory:') fs.mkdirSync(path.dirname(target), { recursive: true });
 
@@ -237,4 +242,4 @@ function open(file) {
   return db;
 }
 
-module.exports = { open, SCHEMA };
+module.exports = { open, pathFor, SCHEMA };

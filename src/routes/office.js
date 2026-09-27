@@ -1,5 +1,8 @@
 'use strict';
 
+const fs = require('node:fs');
+const path = require('node:path');
+
 const v = require('../validate');
 const auth = require('../auth');
 const { HttpError } = require('../http');
@@ -14,6 +17,7 @@ const { readCustomers, sameName, MOST_ROWS } = require('../import');
 const settingsStore = require('../settings');
 const invoicing = require('../invoicing');
 const { consentUrl } = require('../quickbooks');
+const backup = require('../backup');
 
 const KINDS = ['sprinkler', 'lighting', 'drainage', 'other'];
 const EXPENSE_KINDS = ['materials', 'fuel', 'equipment', 'subcontractor',
@@ -1421,6 +1425,82 @@ module.exports = [
       return undefined;
     },
   },
+  /* ---------------------------------------------------------------- backups
+   *
+   * The app has always saved as it went; what it never did was keep a copy
+   * anywhere. These three let the owner see that it is happening, force one
+   * before he does something he is nervous about, and walk away with the file.
+   */
+
+  {
+    method: 'GET',
+    path: '/api/office/backups',
+    handler() {
+      const dir = backup.defaultDir();
+      const backups = backup.list(dir);
+
+      return {
+        dir,
+        on: process.env.BACKUP_OFF !== '1',
+        every_hours: Number(process.env.BACKUP_EVERY_HOURS) || 6,
+        newest: backups[0] || null,
+        kept_bytes: backups.reduce((t, b) => t + b.bytes, 0),
+        backups,
+      };
+    },
+  },
+
+  {
+    method: 'POST',
+    path: '/api/office/backups',
+    handler({ db }) {
+      try {
+        const made = backup.backupNow(db, backup.defaultDir());
+        return { saved: made };
+      } catch (err) {
+        throw new HttpError(500, `Could not save a copy: ${err.message}`);
+      }
+    },
+  },
+
+  {
+    method: 'GET',
+    path: '/api/office/backups/:name',
+    async handler({ params, res }) {
+      // The only names allowed through are ones this app writes itself, which
+      // rules out a path walked out of the folder rather than trying to spot
+      // one going past.
+      if (!backup.whenOf(params.name)) throw new HttpError(404, 'No such backup');
+
+      const file = path.join(backup.defaultDir(), params.name);
+      let bytes;
+      try {
+        bytes = fs.statSync(file).size;
+      } catch {
+        throw new HttpError(404, 'That backup is no longer there');
+      }
+
+      res.writeHead(200, {
+        'Content-Type': 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${params.name}"`,
+        'Content-Length': bytes,
+      });
+
+      // A database can run to tens of megabytes, so it goes out in pieces
+      // rather than through memory. The handler waits for the last of it: the
+      // server sends an empty 204 to anything that returns while the response
+      // is still open, which would arrive on top of the file.
+      await new Promise((resolve) => {
+        const reading = fs.createReadStream(file);
+        const done = () => resolve();
+        reading.on('error', () => { res.destroy(); resolve(); });
+        res.on('close', done);
+        reading.pipe(res).on('finish', done);
+      });
+
+      return undefined;
+    },
+  },
 ];
 
 /*
@@ -1435,8 +1515,11 @@ module.exports = module.exports.map((route) => {
 
   return {
     ...route,
-    handler(ctx) {
-      const result = inner(ctx);
+    async handler(ctx) {
+      // Awaited, not just called: a handler that returns a promise would
+      // otherwise be spread as if it were its own result, throwing away the
+      // response and leaving the rejection to nobody.
+      const result = await inner(ctx);
       if (!result || typeof result !== 'object') return result;
       return { ...result, counts: officeCounts(ctx.db) };
     },

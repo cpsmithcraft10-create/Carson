@@ -4,7 +4,7 @@
    announcements, run payroll. */
 
 var TABS = ['today', 'week', 'jobs', 'hours', 'quotes', 'billing', 'expenses',
-  'reports', 'pay', 'customers', 'crew', 'notices'];
+  'reports', 'pay', 'customers', 'crew', 'notices', 'backups'];
 
 var view = {
   me: null,
@@ -68,6 +68,7 @@ function fetchTab() {
     return api('/api/office/reports?from=' + view.repFrom + '&to=' + view.repTo);
   }
   if (view.tab === 'notices') return api('/api/office/notices');
+  if (view.tab === 'backups') return api('/api/office/backups');
   if (view.tab === 'crew') return api('/api/office/people?include_past=1');
 
   var q = '?from=' + view.payFrom + '&to=' + view.payTo +
@@ -225,6 +226,7 @@ function paint() {
     notices: paintNotices,
     crew: paintCrew,
     pay: paintPay,
+    backups: paintBackups,
   })[view.tab](sheet);
 }
 
@@ -1945,6 +1947,114 @@ function setWorking(p, active) {
 }
 
 /* ------------------------------ payroll --------------------------- */
+
+/* ------------------------------- backups -------------------------------- */
+
+/*
+ * Saving was never the thing anybody had to worry about: every button in this
+ * app writes to the file the moment it is pressed. Keeping a copy was. This
+ * screen exists to show that copies are being kept, let the owner force one
+ * before he does something he is nervous about, and — the part that actually
+ * protects the business — hand him the file to put somewhere else.
+ */
+
+function sizeWords(bytes) {
+  var n = Number(bytes) || 0;
+  if (n < 1024) return n + ' bytes';
+  if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+  return (n / (1024 * 1024)).toFixed(n < 10 * 1024 * 1024 ? 1 : 0) + ' MB';
+}
+
+/** 'Today at 2:05pm', or the day itself once it is not this week's news. */
+function takenWords(iso) {
+  var when = new Date(iso);
+  if (isNaN(when.getTime())) return '';
+
+  var clock = when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  var day = when.getFullYear() + '-' + pad(when.getMonth() + 1) + '-' + pad(when.getDate());
+
+  if (day === today()) return 'Today at ' + clock;
+  if (day === shiftDate(today(), -1)) return 'Yesterday at ' + clock;
+  return shortDate(day) + ' at ' + clock;
+}
+
+function howLongAgo(iso) {
+  var mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!isFinite(mins) || mins < 0) return '';
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins === 1 ? 'a minute ago' : mins + ' minutes ago';
+  var hours = Math.round(mins / 60);
+  if (hours < 24) return hours === 1 ? 'an hour ago' : hours + ' hours ago';
+  var days = Math.round(hours / 24);
+  return days === 1 ? 'a day ago' : days + ' days ago';
+}
+
+function paintBackups(sheet) {
+  var d = view.data;
+  var copies = d.backups || [];
+  var stale = d.newest
+    && (Date.now() - new Date(d.newest.taken_at).getTime()) > 48 * 3600 * 1000;
+
+  sheet.appendChild(make('div', { class: 'card' }, figures([
+    { value: d.newest ? howLongAgo(d.newest.taken_at) : 'not yet',
+      label: 'last copy kept' },
+    { value: String(copies.length), label: copies.length === 1 ? 'copy kept' : 'copies kept' },
+    { value: sizeWords(d.kept_bytes), label: 'they take up' },
+  ])));
+
+  sheet.appendChild(panel('Nothing needs saving by hand', [
+    make('button', { class: 'go slim', style: 'margin:0', onclick: function () {
+      then(api('/api/office/backups', { method: 'POST' }), 'Copy kept.');
+    } }, 'Keep a copy now'),
+  ], make('div', { class: 'pad' },
+    make('p', { class: 'lede', text: 'Every hour, job, quote and invoice is written down the '
+      + 'moment somebody presses the button. There is no save button in this app and there '
+      + 'never was one — nothing is ever sitting unsaved, on anybody’s phone or in '
+      + 'the office.' }),
+    d.on
+      ? make('p', { class: 'warnline', text: 'On top of that, the whole thing copies itself every '
+          + d.every_hours + ' hours while the office computer is on. Old copies clear '
+          + 'themselves out: every copy from the last two days, one a day for a month, then '
+          + 'one a month.' })
+      : make('p', { class: 'warnline', text: 'Automatic copies are switched off on this '
+          + 'computer. Use the button above, or ask whoever set it up to turn them back on.' }),
+    stale && make('p', { class: 'warnline' },
+      make('b', { text: 'The last copy was kept ' + howLongAgo(d.newest.taken_at) + '. ' }),
+      'Copies are only kept while the office computer is on and this app is running. If it '
+      + 'has been off, press the button above.'),
+
+    make('p', { class: 'warnline' },
+      make('b', { text: 'Worth doing once a month: ' }),
+      'a copy sitting on the same computer will not help if that computer is stolen or the '
+      + 'drive dies. Download the newest one below and put it on a memory stick or in your '
+      + 'email — that one file is the whole business.'))));
+
+  sheet.appendChild(panel('The copies', [], copies.length
+    ? make('div', { class: 'scroller' }, make('table', {},
+        make('thead', {}, make('tr', {},
+          make('th', { text: 'When it was taken' }),
+          make('th', { class: 'r', text: 'Size' }),
+          make('th', { text: '' }))),
+        make('tbody', {}, copies.map(function (b, i) {
+          return make('tr', {},
+            make('td', {},
+              make('b', { text: takenWords(b.taken_at) }),
+              i === 0 && make('span', { class: 'clock', style: 'display:block',
+                text: 'the newest one' })),
+            make('td', { class: 'r', text: sizeWords(b.bytes) }),
+            make('td', {}, make('a', {
+              class: 'btn slim',
+              href: '/api/office/backups/' + encodeURIComponent(b.name),
+              download: b.name,
+            }, 'Download')));
+        }))))
+    : make('div', { class: 'pad' },
+        make('p', { class: 'none', text: 'No copies kept yet. Press “Keep a copy now”.' }))));
+
+  sheet.appendChild(panel('Where they are kept', [], make('div', { class: 'pad' },
+    make('p', { class: 'clock', text: 'On this computer, in:' }),
+    make('p', { class: 'path', text: d.dir }))));
+}
 
 function paintPay(sheet) {
   var from = make('input', { type: 'date', id: 'pay-from', value: view.payFrom });

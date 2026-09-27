@@ -3,6 +3,7 @@
 const http = require('node:http');
 const { open } = require('./src/db');
 const auth = require('./src/auth');
+const backup = require('./src/backup');
 const {
   HttpError, sendJson, sendText, readBody, readCookies, serveFile,
 } = require('./src/http');
@@ -105,15 +106,24 @@ if (require.main === module) {
   const host = process.env.HOST || '0.0.0.0';
   const db = open();
 
+  // Nobody has to remember to do this, which is the whole point of it.
+  const backups = process.env.BACKUP_OFF === '1' ? null : backup.start(db, {
+    everyHours: Number(process.env.BACKUP_EVERY_HOURS) || 6,
+  });
+
   const server = createServer(db);
   server.listen(port, host, () => {
     const offices = db.prepare("SELECT COUNT(*) AS n FROM employees WHERE role = 'office'").get().n;
     console.log(`Custom Outdoor Design running on http://localhost:${port}`);
     if (offices === 0) console.log('No office account yet — run "npm run setup" to make one.');
+    if (backups) {
+      console.log(`Backing up to ${backups.dir} every ${backups.everyHours} hours.`);
+    }
   });
 
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.on(signal, () => {
+      if (backups) backups.stop();
       server.close(() => {
         db.close();
         process.exit(0);

@@ -1512,6 +1512,61 @@ a.linkout {
   text-underline-offset: 2px;
 }
 
+/* =============================== backups ============================== */
+
+/*
+ * A download has to be a real link for the browser to save the file, so it
+ * needs the button's clothes without being one.
+ */
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--t-small);
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  padding: 0 12px;
+  min-height: var(--ctl);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background .12s ease, border-color .12s ease;
+}
+
+a.btn:hover { background: var(--surface-3); border-color: var(--line-3); }
+a.btn:active { background: var(--line); }
+
+.lede {
+  font-size: var(--t-lead);
+  line-height: 1.5;
+  color: var(--ink);
+  margin: 0 0 var(--s3);
+}
+
+.warnline {
+  font-size: var(--t-body);
+  line-height: 1.55;
+  color: var(--ink-2);
+  margin: 0 0 var(--s3);
+}
+
+.warnline:last-child { margin-bottom: 0; }
+.warnline b { color: var(--ink); }
+
+.path {
+  font-family: var(--mono);
+  font-size: var(--t-small);
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: var(--s2) var(--s3);
+  margin: var(--s1) 0 0;
+  overflow-wrap: anywhere;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dot { animation: none; }
   *, *::before, *::after { transition-duration: .01ms !important; }

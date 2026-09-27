@@ -6,7 +6,7 @@ needs doing, clock on and off, and close the job out with what they used. The
 office OKs the hours, puts announcements out, and runs payroll.
 
 No dependencies to install — Node 22.5 or newer and nothing else. Everything
-lives in one SQLite file you can copy or back up.
+lives in one SQLite file, and the app keeps its own backups of it.
 
 ## Getting started
 
@@ -100,6 +100,9 @@ They can also:
   **anything over 40 hours flagged**, a day-by-day breakdown, a roll-up of
   every part used over the period for billing, and a CSV for whoever does the
   books.
+- **Backups** — when the last copy of the database was taken, how many are
+  kept, a button to take one now, and a download link for each. Copies happen
+  on their own every six hours; see [Saving and backups](#saving-and-backups).
 
 ## Bringing the customers you already have
 
@@ -278,7 +281,40 @@ is only marked `Secure` when the request arrives over HTTPS. Easiest is a
 reverse proxy (Caddy or nginx) doing TLS in front of `localhost:3000` and
 forwarding `X-Forwarded-Proto`. Do not put port 3000 straight on the internet.
 
-Back up `data/custom-outdoor.db` — that one file is every hour anybody worked.
+## Saving and backups
+
+Nothing is ever waiting to be saved. Every clock-in, job, quote and invoice is
+written to the database the moment the button is pressed — there is no save
+button in the app, and a power cut loses nothing that had already been entered.
+
+Backups run on their own. While the server is up it takes a snapshot every six
+hours into `data/backups/`, using SQLite's `VACUUM INTO`, which copies a live
+database safely without locking anybody out. Each snapshot is a complete,
+ordinary `.db` file that opens in anything that reads SQLite.
+
+Old snapshots clear themselves out: every one from the last two days, then one
+a day for a month, then one a month. A year of backups costs a few hundred
+megabytes.
+
+The office side has a **Backups** screen showing when the last copy was taken,
+a button to force one before anything risky, and a download link for each.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `BACKUP_DIR` | `data/backups` | Where snapshots are written |
+| `BACKUP_EVERY_HOURS` | `6` | How often one is taken |
+| `BACKUP_OFF` | unset | Set to `1` to turn them off |
+
+Two things this does **not** protect against, both worth an answer:
+
+- **The whole machine dying.** Snapshots sit on the same disk as the database.
+  Point `BACKUP_DIR` at a synced folder or a second drive, or have somebody
+  download the newest copy from the Backups screen once a month.
+- **The server being off.** Snapshots only happen while it is running. The
+  Backups screen says so plainly when the last copy is more than two days old.
+
+`data/custom-outdoor.db` is still the live file — that one file is every hour
+anybody worked.
 
 ## Tests
 
@@ -324,6 +360,7 @@ src/billing.js       working out what a finished job should bill
 src/quickbooks.js    every URL and body shape QuickBooks Online expects
 src/invoicing.js     a finished job, all the way to an invoice
 src/money.js         what a job left in the business, and the roll-ups
+src/backup.js        snapshots of the database, and clearing the old ones out
 src/routes/          sign-in, crew and office endpoints
 public/index.html    sign in
 public/crew.html     the crew screen
