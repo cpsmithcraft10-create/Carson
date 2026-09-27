@@ -4,7 +4,11 @@ const v = require('../validate');
 const invoicing = require('../invoicing');
 const { HttpError } = require('../http');
 const { today, weekStart, addDays } = require('../time');
-const { loadJobs, loadJob, loadShifts, loadShift, shiftTotals } = require('../queries');
+const {
+  loadJobs, loadJob, loadShifts, loadShift, shiftTotals, loadSheet,
+} = require('../queries');
+const { addPart, dropPart } = require('../parts');
+const { usualParts, sheetWords } = require('../worksheets');
 
 const CAN_CHANGE = new Set(['open', 'sent', 'question']);
 
@@ -213,13 +217,21 @@ module.exports = [
       const jobId = myJob(db, v.id(params.id, 'Job'), user.id);
       const wrap = v.text(body.wrap_notes, 'How it went', { max: 1000 });
       const materials = v.text(body.materials, 'Parts used', { max: 1000 });
+      const nextVisit = v.text(body.next_visit, 'To come back for', { max: 500 });
+      const signedBy = v.text(body.signed_by, 'Who signed off', { max: 120 });
+
+      const already = db.prepare('SELECT signed_by, signed_at FROM jobs WHERE id = ?')
+        .get(jobId) || {};
+      let signedAt = null;
+      if (signedBy) signedAt = already.signed_by ? already.signed_at : new Date().toISOString();
 
       db.prepare(`
         UPDATE jobs
            SET status = 'done', wrap_notes = ?, materials = ?,
+               next_visit = ?, signed_by = ?, signed_at = ?,
                finished_at = datetime('now'), finished_by = ?
          WHERE id = ?
-      `).run(wrap, materials, user.id, jobId);
+      `).run(wrap, materials, nextVisit, signedBy, signedAt, user.id, jobId);
 
       // The bill follows the work. This never blocks the crew — if it cannot
       // be sent the job waits in the office's billing queue instead.
@@ -270,6 +282,48 @@ module.exports = [
         ON CONFLICT (notice_id, employee_id) DO NOTHING
       `).run(noticeId, user.id);
       return { ok: true };
+    },
+  },
+
+  /* --------------------------------------------------------- the worksheet
+   *
+   * Parts go on the sheet as they come off the truck, not from memory at the
+   * end of the day. That is the whole reason these are separate from
+   * finishing the job.
+   */
+
+  {
+    method: 'GET',
+    path: '/api/crew/jobs/:id/sheet',
+    handler({ db, user, params }) {
+      const jobId = myJob(db, v.id(params.id, 'Job'), user.id);
+      const sheet = loadSheet(db, jobId);
+
+      return {
+        sheet: { ...sheet, words: sheetWords(sheet) },
+        usual_parts: usualParts(db.prepare(
+          'SELECT item, unit FROM materials ORDER BY id DESC LIMIT 400').all()),
+      };
+    },
+  },
+
+  {
+    method: 'POST',
+    path: '/api/crew/jobs/:id/parts',
+    handler({ db, user, params, body }) {
+      const jobId = myJob(db, v.id(params.id, 'Job'), user.id);
+      const sheet = addPart(db, jobId, body, user.id);
+      return { sheet: { ...sheet, words: sheetWords(sheet) } };
+    },
+  },
+
+  {
+    method: 'DELETE',
+    path: '/api/crew/jobs/:id/parts/:partId',
+    handler({ db, user, params }) {
+      const jobId = myJob(db, v.id(params.id, 'Job'), user.id);
+      const sheet = dropPart(db, jobId, v.id(params.partId, 'Part'));
+      return { sheet: { ...sheet, words: sheetWords(sheet) } };
     },
   },
 ];

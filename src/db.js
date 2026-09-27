@@ -55,6 +55,18 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_customer ON jobs(customer_id);
 
 -- A job can take a two or three person crew, so this is many-to-many.
+CREATE TABLE IF NOT EXISTS materials (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id     INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  item       TEXT    NOT NULL,
+  quantity   REAL    NOT NULL DEFAULT 1,
+  unit       TEXT,
+  added_by   INTEGER REFERENCES employees(id),
+  created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS materials_by_job ON materials(job_id);
+
 CREATE TABLE IF NOT EXISTS crew_on_job (
   job_id      INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
@@ -205,6 +217,12 @@ CREATE INDEX IF NOT EXISTS idx_sessions_employee ON sessions(employee_id);
  */
 const LATER_COLUMNS = [
   ['jobs', 'customer_id', 'INTEGER REFERENCES customers(id) ON DELETE SET NULL'],
+  // What the worksheet carries beyond the work itself: who at the property
+  // put their name to it, and what somebody has to come back for. The second
+  // one is how a call-back stops living in somebody's head.
+  ['jobs', 'signed_by', 'TEXT'],
+  ['jobs', 'signed_at', 'TEXT'],
+  ['jobs', 'next_visit', 'TEXT'],
   // What to charge for this job. A quoted price wins over hours x rate; the
   // parts charge is what goes on the bill, not what the parts cost.
   ['jobs', 'quoted_price', 'REAL'],

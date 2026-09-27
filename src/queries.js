@@ -1,11 +1,13 @@
 'use strict';
 
 const { hoursWorked, round2 } = require('./time');
+const { buildSheet } = require('./worksheets');
 
 const JOB_COLUMNS = `
   j.id, j.job_date, j.kind, j.customer, j.address, j.phone, j.customer_id,
   j.details, j.est_hours, j.status, j.wrap_notes, j.materials, j.finished_at,
   j.quoted_price, j.parts_price, j.no_charge,
+  j.signed_by, j.signed_at, j.next_visit,
   j.created_at, f.name AS finished_by_name
 `;
 
@@ -193,8 +195,64 @@ function loadExpenses(db, where, params = []) {
   `).all(...params).map((row) => ({ ...row, billable: Boolean(row.billable) }));
 }
 
+
+/* -------------------------------- worksheets ---------------------------- */
+
+/** Parts written against a set of jobs, keyed by job. */
+function loadMaterials(db, jobIds) {
+  if (!jobIds.length) return new Map();
+
+  const slots = jobIds.map(() => '?').join(', ');
+  const rows = db.prepare(`
+    SELECT m.id, m.job_id, m.item, m.quantity, m.unit, e.name AS added_by_name
+      FROM materials m
+      LEFT JOIN employees e ON e.id = m.added_by
+     WHERE m.job_id IN (${slots})
+     ORDER BY m.id
+  `).all(...jobIds);
+
+  const byJob = new Map();
+  for (const row of rows) {
+    if (!byJob.has(row.job_id)) byJob.set(row.job_id, []);
+    byJob.get(row.job_id).push(row);
+  }
+  return byJob;
+}
+
+/**
+ * Whole worksheets: the job, everybody's hours on it, and the parts. Built in
+ * three queries however many sheets are asked for, rather than three each.
+ */
+function loadSheets(db, where, params = []) {
+  const jobs = loadJobs(db, where, params);
+  if (!jobs.length) return [];
+
+  const ids = jobs.map((j) => j.id);
+  const slots = ids.map(() => '?').join(', ');
+
+  const shifts = loadShifts(db, `s.job_id IN (${slots})`, ids);
+  const byJob = new Map();
+  for (const s of shifts) {
+    if (!byJob.has(s.job_id)) byJob.set(s.job_id, []);
+    byJob.get(s.job_id).push(s);
+  }
+
+  const materials = loadMaterials(db, ids);
+
+  return jobs.map((job) => buildSheet({
+    job,
+    shifts: byJob.get(job.id) || [],
+    materials: materials.get(job.id) || [],
+  }));
+}
+
+function loadSheet(db, jobId) {
+  return loadSheets(db, 'j.id = ?', [jobId])[0] || null;
+}
+
 module.exports = {
   loadQuotes, loadQuote, loadExpenses,
   loadJobs, loadJob, loadShifts, loadShift, shapeShift, shiftTotals,
   officeCounts, loadCustomers, loadCustomer,
+  loadMaterials, loadSheets, loadSheet,
 };

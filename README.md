@@ -48,8 +48,12 @@ buttons for the usual amounts, and they can say what they got done.
 
 They can also:
 
-- **Mark the job finished** with how it went and the parts used, which is what
-  the office bills from
+- **Put parts on the worksheet as they use them** — tap what they usually
+  use, set how many with a stepper rather than a keyboard, done. Not a memory
+  test at five o'clock
+- **Mark the job finished** with how it went, anything to come back for, and
+  who signed off. If parts are already on the sheet it does not ask for them
+  again
 - **Start something not on the list** for a callback nobody wrote down
 - **Put hours down by hand** if they forgot to hit start — that one stays open
   so three houses in a row go in one after another
@@ -100,9 +104,51 @@ They can also:
   **anything over 40 hours flagged**, a day-by-day breakdown, a roll-up of
   every part used over the period for billing, and a CSV for whoever does the
   books.
+- **Worksheets** — the day's sheets, each saying whether it still needs
+  something; open one to read it as a document, fill in what was done, put
+  parts on, and print it. See [Worksheets](#worksheets).
 - **Backups** — when the last copy of the database was taken, how many are
   kept, a button to take one now, and a download link for each. Copies happen
   on their own every six hours; see [Saving and backups](#saving-and-backups).
+
+## Worksheets
+
+A worksheet is what happened at a property on a day: who was there, how long,
+what got done, and what went in. All of that already existed — a job, the hours
+against it, the parts — but scattered across three screens and never in a shape
+anybody could hand over.
+
+Each job on a day **is** a worksheet, numbered by its own job id (`WS-00142`),
+so no counter can get out of step and no two sheets ever share a number.
+
+**It says what it still needs.** A sheet with nothing on it says
+"Nobody has put hours on it", "What was done is blank", "No parts written
+down" — in that order, because the first one is what to ask for next. A sheet
+that looks finished and is not is worse than one that admits it.
+
+**Parts go on as they are used.** They are lines, not a paragraph, so they can
+be counted, repeated on the next visit and put on a bill. The crew add them
+from the phone with a stepper rather than a keyboard, and the app offers what
+this crew actually use most — learned from what has already been written down,
+with no list for anybody to maintain. When parts are already on the sheet, the
+end-of-day form stops asking for them, so the same valve never lands twice.
+
+**It prints.** One sheet per page, black and white, with a signature line —
+a real document to hand over, file or email as a PDF. Printing opens a window
+of its own, so the screen the office was working on is left alone.
+
+The sheet also carries **what to come back for**, which is how a call-back
+stops living in somebody's head, and **who signed off**. The signing time is
+stamped when a name first goes on and does not creep when the sheet is edited
+afterwards.
+
+### Only want the worksheets?
+
+At the bottom of the Worksheets screen there is one switch. With it on, the
+office rail drops from fourteen screens to the six a worksheet needs —
+Worksheets, Schedule, Hours, Customers, Team, Backups. Quotes, billing,
+expenses, reports, payroll and notices are put away, not switched off:
+nothing in them is touched, and one press brings it all back.
 
 ## Bringing the customers you already have
 
@@ -360,6 +406,8 @@ src/billing.js       working out what a finished job should bill
 src/quickbooks.js    every URL and body shape QuickBooks Online expects
 src/invoicing.js     a finished job, all the way to an invoice
 src/money.js         what a job left in the business, and the roll-ups
+src/worksheets.js    a day's work read as a document, and what it still needs
+src/parts.js         parts going on and off a worksheet
 src/backup.js        snapshots of the database, and clearing the old ones out
 src/routes/          sign-in, crew and office endpoints
 public/index.html    sign in

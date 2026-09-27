@@ -23,6 +23,12 @@ var view = {
   wrapping: false,
   fixing: false,
   flash: null,
+  sheet: null,        // the worksheet for the job that is open
+  usualParts: [],     // what this crew put on sheets most, for one-tap adding
+  partItem: '',       // kept here so a repaint does not lose a half-typed part
+  partQty: 1,
+  partUnit: '',
+  partOpen: false,
 };
 
 /* ----------------------------- loading ---------------------------- */
@@ -30,11 +36,19 @@ var view = {
 function load() {
   var weekFrom = mondayOf(view.day);
 
-  return Promise.all([
+  var want = [
     api('/api/crew/day?date=' + view.day),
     api('/api/crew/week?from=' + weekFrom + '&to=' + shiftDate(weekFrom, 6)),
     api('/api/crew/notices'),
-  ]).then(function (all) {
+  ];
+
+  // The sheet only matters when a job is open, so it is only asked for then.
+  if (view.openJob) {
+    want.push(api('/api/crew/jobs/' + view.openJob + '/sheet')
+      .catch(function () { return null; }));
+  }
+
+  return Promise.all(want).then(function (all) {
     view.jobs = all[0].jobs;
     view.shifts = all[0].shifts;
     view.running = all[0].running;
@@ -42,6 +56,9 @@ function load() {
     view.week = all[1];
     view.notices = all[2].notices;
     view.unread = all[2].unread;
+
+    view.sheet = all[3] ? all[3].sheet : null;
+    view.usualParts = all[3] ? (all[3].usual_parts || []) : [];
 
     // A job that came off the list while it was open should not strand them.
     if (view.openJob && !jobById(view.openJob)) view.openJob = null;
@@ -85,8 +102,30 @@ function openJob(id) {
   view.openJob = id;
   view.flash = null;
   view.wrapping = false;
-  paint();
+  view.partOpen = false;
+  view.sheet = null;
+  paint();                      // the job is already in hand: show it now
   window.scrollTo(0, 0);
+  bringSheet(id);               // the parts follow a moment later
+}
+
+/**
+ * The worksheet for the job just opened. Fetched on its own rather than by
+ * reloading the day, so opening a job on a phone in a field costs one small
+ * request instead of four.
+ */
+function bringSheet(id) {
+  return api('/api/crew/jobs/' + id + '/sheet').then(function (r) {
+    // They may have gone back, or into another job, while this was in the
+    // air. Painting it now would show one job's parts under another's name.
+    if (view.openJob !== id) return;
+
+    view.sheet = r.sheet;
+    view.usualParts = r.usual_parts || [];
+    paint();
+  }).catch(function () {
+    // The job screen is still worth having without it.
+  });
 }
 
 /* ----------------------------- painting --------------------------- */
@@ -265,8 +304,13 @@ function paintOneJob(sheet, job) {
   var runningHere = view.running && view.running.job_id === job.id;
 
   sheet.appendChild(make('div', { class: 'backrow' },
-    make('button', { onclick: function () { view.openJob = null; view.flash = null; paint(); } },
-      '\u2039 Back to jobs')));
+    make('button', { onclick: function () {
+      view.openJob = null;
+      view.flash = null;
+      view.sheet = null;
+      view.partOpen = false;
+      paint();
+    } }, '\u2039 Back to jobs')));
 
   if (runningHere) sheet.appendChild(onClockCard(view.running, {}));
 
@@ -287,7 +331,15 @@ function paintOneJob(sheet, job) {
   }
   if (job.status === 'done') {
     if (job.wrap_notes) facts.push(['Wrapped up', job.wrap_notes]);
-    if (job.materials) facts.push(['Parts used', job.materials]);
+    if (view.sheet && view.sheet.materials.length) {
+      facts.push(['Parts used', view.sheet.materials.map(function (m) {
+        return m.words;
+      }).join(', ')]);
+    } else if (job.materials) {
+      facts.push(['Parts used', job.materials]);
+    }
+    if (job.next_visit) facts.push(['Come back for', job.next_visit]);
+    if (job.signed_by) facts.push(['Signed off by', job.signed_by]);
     if (job.finished_by_name) facts.push(['Finished by', job.finished_by_name]);
   }
 
@@ -308,6 +360,10 @@ function paintOneJob(sheet, job) {
       })))));
 
   sheet.appendChild(jobActions(job, runningHere));
+
+  if (job.status !== 'done' || (view.sheet && view.sheet.materials.length)) {
+    sheet.appendChild(partsPanel(job));
+  }
 
   if (mine.length > 0) {
     sheet.appendChild(panel('Hours you put on this job', [],
@@ -353,24 +409,181 @@ function jobActions(job, runningHere) {
   return panel('What now?', [], body);
 }
 
+/* ----------------------------- the worksheet ---------------------------- */
+
+/*
+ * Parts go on the sheet as they come off the truck.
+ *
+ * The old way was one box at the end of the day asking what got used, which
+ * is a memory test nobody passes at five o'clock. This is three taps while
+ * standing next to the hole: the thing, how many, on.
+ */
+
+function partsPanel(job) {
+  var sheet = view.sheet;
+  var lines = sheet ? sheet.materials : [];
+
+  var body = make('div', { class: 'pad' });
+
+  if (lines.length) {
+    body.appendChild(make('ul', { class: 'partlist' }, lines.map(function (m) {
+      return make('li', {},
+        make('span', { class: 'num', text: partQtyWords(m) }),
+        make('span', { class: 'what', text: m.item }),
+        make('button', { class: 'plain', onclick: function () {
+          then(api('/api/crew/jobs/' + job.id + '/parts/' + m.id, { method: 'DELETE' }),
+            'Taken off.');
+        } }, 'Take off'));
+    })));
+  } else if (!sheet) {
+    // Saying "nothing on the sheet" before the sheet has arrived is a lie
+    // somebody would act on by writing everything out a second time.
+    body.appendChild(make('p', { class: 'none', text: 'Getting the sheet\u2026' }));
+  } else {
+    body.appendChild(make('p', { class: 'none',
+      text: 'Nothing on the sheet yet. Put parts on as you use them — it saves '
+        + 'trying to remember at the end of the day.' }));
+  }
+
+  if (!view.partOpen) {
+    body.appendChild(make('button', { class: 'go', onclick: function () {
+      view.partOpen = true; paint();
+    } }, 'Add a part'));
+    return panel('Parts you have used', [], body);
+  }
+
+  body.appendChild(partForm(job));
+  return panel('Parts you have used', [], body);
+}
+
+function partQtyWords(m) {
+  var qty = String(Math.round((Number(m.quantity) || 0) * 100) / 100);
+  return m.unit ? qty + ' ' + m.unit : qty;
+}
+
+function partForm(job) {
+  var usual = view.usualParts.slice(0, 8);
+
+  var what = make('input', { id: 'part-what', maxlength: '160',
+    placeholder: 'Spray head, valve, 3/4 pipe…', value: view.partItem });
+  what.addEventListener('input', function () { view.partItem = what.value; });
+
+  var unit = make('input', { id: 'part-unit', maxlength: '24',
+    placeholder: 'ft, bags — leave blank to just count them',
+    value: view.partUnit });
+  unit.addEventListener('input', function () { view.partUnit = unit.value; });
+
+  var count = make('b', { id: 'part-count', text: String(view.partQty) });
+
+  var step = function (by) {
+    return make('button', {
+      type: 'button', class: 'stepper', 'aria-label': by > 0 ? 'One more' : 'One fewer',
+      onclick: function () {
+        view.partQty = Math.max(1, Math.round((view.partQty + by) * 100) / 100);
+        count.textContent = String(view.partQty);
+      },
+    }, by > 0 ? '+' : '−');
+  };
+
+  return make('div', {},
+    usual.length && make('div', { class: 'field' },
+      make('label', { text: 'What you usually use' }),
+      make('div', { class: 'picks' }, usual.map(function (u) {
+        return make('button', { type: 'button', onclick: function () {
+          view.partItem = u.item;
+          view.partUnit = u.unit || '';
+          what.value = u.item;
+          unit.value = u.unit || '';
+        } }, u.item);
+      }))),
+
+    make('div', { class: 'field' },
+      make('label', { for: 'part-what', text: 'What was it?' }), what),
+
+    make('div', { class: 'field' },
+      make('label', { text: 'How many?' }),
+      make('div', { class: 'counter' }, step(-1), count, step(1))),
+
+    make('div', { class: 'field' },
+      make('label', { for: 'part-unit', text: 'Measured how? (only if it is not a count)' }),
+      unit),
+
+    make('button', { class: 'go', onclick: function () {
+      if (!what.value.trim()) { say('Say what the part was.', 'bad'); return; }
+
+      var item = what.value.trim();
+      var qty = view.partQty;
+      var howMeasured = unit.value.trim();
+
+      // Cleared before the round trip, so the next part starts from empty
+      // rather than from the last one.
+      view.partItem = '';
+      view.partUnit = '';
+      view.partQty = 1;
+      view.partOpen = false;
+
+      then(api('/api/crew/jobs/' + job.id + '/parts', {
+        method: 'POST',
+        body: { item: item, quantity: qty, unit: howMeasured },
+      }), 'On the sheet.');
+    } }, 'Put it on the sheet'),
+
+    make('button', { class: 'slim', style: 'width:100%', onclick: function () {
+      view.partOpen = false; paint();
+    } }, 'Never mind'));
+}
+
 function wrapUpForm(job) {
+  var onSheet = view.sheet ? view.sheet.materials : [];
+
   var how = make('textarea', { id: 'wrap-how', maxlength: '900',
     placeholder: 'New valve in zone 3, all six zones tested and running.' }, job.wrap_notes || '');
-  var parts = make('textarea', { id: 'wrap-parts', maxlength: '900',
+
+  // Parts put on during the day are already down. Asking for them again in a
+  // box is how the same valve ends up on the sheet twice.
+  var parts = onSheet.length ? null : make('textarea', { id: 'wrap-parts', maxlength: '900',
     placeholder: '1 in valve, 3 spray heads, 20ft of poly' }, job.materials || '');
+
+  var next = make('input', { id: 'wrap-next', maxlength: '500',
+    placeholder: 'Come back in spring to check the timer' });
+  next.value = job.next_visit || '';
+
+  var signed = make('input', { id: 'wrap-signed', maxlength: '120',
+    placeholder: 'Whoever was home \u2014 leave blank if nobody was' });
+  signed.value = job.signed_by || '';
 
   return make('div', {},
     make('div', { class: 'field' },
       make('label', { for: 'wrap-how', text: 'How did it go?' }), how),
+
+    onSheet.length
+      ? make('div', { class: 'reassure' },
+          make('b', { text: onSheet.length === 1
+            ? 'One part is already on the sheet. '
+            : onSheet.length + ' parts are already on the sheet. ' }),
+          'You do not need to write them out again.')
+      : make('div', { class: 'field' },
+          make('label', { for: 'wrap-parts', text: 'Parts used (so the office can bill it)' }),
+          parts),
+
     make('div', { class: 'field' },
-      make('label', { for: 'wrap-parts', text: 'Parts used (so the office can bill it)' }), parts),
+      make('label', { for: 'wrap-next', text: 'Anything to come back for?' }), next),
+
+    make('div', { class: 'field' },
+      make('label', { for: 'wrap-signed', text: 'Did anybody sign off on it?' }), signed),
+
     make('button', {
       class: 'go',
       onclick: function () {
         view.wrapping = false;
         then(api('/api/crew/jobs/' + job.id + '/finish', {
           method: 'POST',
-          body: { wrap_notes: how.value.trim(), materials: parts.value.trim() },
+          body: {
+            wrap_notes: how.value.trim(),
+            materials: parts ? parts.value.trim() : (job.materials || ''),
+            next_visit: next.value.trim(),
+            signed_by: signed.value.trim(),
+          },
         }), 'Marked finished. The office can see it.');
       },
     }, 'Mark it finished'),

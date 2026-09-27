@@ -10,6 +10,7 @@ const { today, weekStart, addDays, round2 } = require('../time');
 const {
   loadJobs, loadJob, loadShifts, loadShift, shiftTotals,
   officeCounts, loadCustomers, loadCustomer, loadQuotes, loadQuote, loadExpenses,
+  loadSheets, loadSheet,
 } = require('../queries');
 const money = require('../money');
 const { buildInvoice } = require('../billing');
@@ -18,6 +19,8 @@ const settingsStore = require('../settings');
 const invoicing = require('../invoicing');
 const { consentUrl } = require('../quickbooks');
 const backup = require('../backup');
+const { dayTotals, usualParts, sheetWords } = require('../worksheets');
+const { addPart, dropPart } = require('../parts');
 
 const KINDS = ['sprinkler', 'lighting', 'drainage', 'other'];
 const EXPENSE_KINDS = ['materials', 'fuel', 'equipment', 'subcontractor',
@@ -102,6 +105,15 @@ function review(status) {
 
     return { shift: loadShift(db, shift.id) };
   };
+}
+
+/**
+ * What this crew actually use, learned from what has already been written on a
+ * sheet. Four hundred is plenty to rank by and cheap to read.
+ */
+function whatTheyUse(db) {
+  return usualParts(db.prepare(
+    'SELECT item, unit FROM materials ORDER BY id DESC LIMIT 400').all());
 }
 
 function csvCell(value) {
@@ -1501,6 +1513,104 @@ module.exports = [
       return undefined;
     },
   },
+  /* ------------------------------------------------------------ worksheets
+   *
+   * What actually happened at a property on a day: who was there, how long,
+   * what got done, what went in. All of it already existed scattered across a
+   * job and its shifts; these routes read it as one document.
+   */
+
+  {
+    method: 'GET',
+    path: '/api/office/worksheets',
+    handler({ db, query }) {
+      const from = query.from ? v.date(query.from, 'From') : today();
+      const to = query.to ? v.date(query.to, 'To') : from;
+
+      const sheets = loadSheets(db, 'j.job_date BETWEEN ? AND ?', [from, to])
+        .map((sheet) => ({ ...sheet, words: sheetWords(sheet) }));
+
+      return {
+        from,
+        to,
+        sheets,
+        totals: dayTotals(sheets),
+        // What this crew actually use, so putting parts on a sheet is tapping
+        // a name rather than spelling one.
+        usual_parts: whatTheyUse(db),
+      };
+    },
+  },
+
+  {
+    method: 'GET',
+    path: '/api/office/worksheets/:id',
+    handler({ db, params }) {
+      const sheet = loadSheet(db, v.id(params.id, 'Worksheet'));
+      if (!sheet) throw new HttpError(404, 'No such worksheet');
+
+      return {
+        sheet: { ...sheet, words: sheetWords(sheet) },
+        // Wanted most on the sheet somebody is actually filling in.
+        usual_parts: whatTheyUse(db),
+      };
+    },
+  },
+
+  {
+    method: 'PATCH',
+    path: '/api/office/worksheets/:id',
+    handler({ db, params, body }) {
+      const jobId = v.id(params.id, 'Worksheet');
+      const job = db.prepare('SELECT id, signed_by, signed_at FROM jobs WHERE id = ?')
+        .get(jobId);
+      if (!job) throw new HttpError(404, 'No such worksheet');
+
+      const done = v.text(body.done, 'What was done', { max: 2000 });
+      const nextVisit = v.text(body.next_visit, 'To come back for', { max: 500 });
+      const signedBy = v.text(body.signed_by, 'Signed off by', { max: 120 });
+
+      // The time belongs to the signature: set when a name first goes on,
+      // kept while it stays, cleared with it. Editing the rest of the sheet
+      // afterwards must not make the sheet claim it was signed later.
+      let signedAt = null;
+      if (signedBy) signedAt = job.signed_by ? job.signed_at : new Date().toISOString();
+
+      db.prepare(`
+        UPDATE jobs SET wrap_notes = ?, next_visit = ?, signed_by = ?, signed_at = ?
+         WHERE id = ?
+      `).run(done, nextVisit, signedBy, signedAt, jobId);
+
+      const sheet = loadSheet(db, jobId);
+      return { sheet: { ...sheet, words: sheetWords(sheet) } };
+    },
+  },
+
+  {
+    method: 'POST',
+    path: '/api/office/worksheets/:id/parts',
+    handler({ db, user, params, body }) {
+      const sheet = addPart(db, v.id(params.id, 'Worksheet'), body, user.id);
+      return { sheet: { ...sheet, words: sheetWords(sheet) } };
+    },
+  },
+
+  {
+    method: 'DELETE',
+    path: '/api/office/worksheets/:id/parts/:partId',
+    handler({ db, params }) {
+      const sheet = dropPart(db, v.id(params.id, 'Worksheet'), v.id(params.partId, 'Part'));
+      return { sheet: { ...sheet, words: sheetWords(sheet) } };
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/office/simple-mode',
+    handler({ db, body }) {
+      settingsStore.put(db, 'worksheets_only', body.only ? '1' : '0');
+      return { simple: settingsStore.on(db, 'worksheets_only') };
+    },
+  },
 ];
 
 /*
@@ -1521,7 +1631,11 @@ module.exports = module.exports.map((route) => {
       // response and leaving the rejection to nobody.
       const result = await inner(ctx);
       if (!result || typeof result !== 'object') return result;
-      return { ...result, counts: officeCounts(ctx.db) };
+      return {
+        ...result,
+        counts: officeCounts(ctx.db),
+        simple: settingsStore.on(ctx.db, 'worksheets_only'),
+      };
     },
   };
 });

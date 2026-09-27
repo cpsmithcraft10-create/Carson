@@ -21,6 +21,11 @@ const DEFAULTS = {
   // Send a finished job straight through, or hold it for somebody to look at.
   auto_send: '1',
 
+  // Some businesses want this for the worksheets and nothing else. With it on
+  // the office rail drops to the six screens worksheets actually need, rather
+  // than asking somebody to walk past quotes and payroll every morning.
+  worksheets_only: '0',
+
   // Where the invoice is raised. Sandbox until the office says otherwise, so
   // a wrong setting cannot bill a real customer.
   qbo_env: 'sandbox',
@@ -83,6 +88,7 @@ function forOffice(db) {
     labour_item: s.labour_item,
     parts_item: s.parts_item,
     auto_send: s.auto_send === '1',
+    worksheets_only: s.worksheets_only === '1',
     qbo_env: s.qbo_env,
     qbo_realm_id: s.qbo_realm_id,
     qbo_connected: qboReady(db),

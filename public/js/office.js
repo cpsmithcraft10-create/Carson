@@ -3,8 +3,21 @@
 /* The office screen. Hand out work, keep an eye on the day, OK hours, post
    announcements, run payroll. */
 
-var TABS = ['today', 'week', 'jobs', 'hours', 'quotes', 'billing', 'expenses',
+var TABS = ['today', 'worksheets', 'week', 'jobs', 'hours', 'quotes', 'billing', 'expenses',
   'reports', 'pay', 'customers', 'crew', 'notices', 'backups'];
+
+/*
+ * Some businesses want this for the worksheets and nothing else. These are
+ * the screens a worksheet actually needs: the sheets, the work they come
+ * from, the hours on them, who the customers are, who the crew are, and the
+ * copies. Everything else is put away rather than deleted — one switch at the
+ * bottom of Worksheets brings it all back.
+ */
+var SIMPLE_TABS = ['worksheets', 'jobs', 'hours', 'customers', 'crew', 'backups'];
+
+function simpleNow() { return !!view.simple; }
+
+function tabsShowing() { return simpleNow() ? SIMPLE_TABS : TABS; }
 
 var view = {
   me: null,
@@ -37,8 +50,13 @@ var view = {
   copying: null,
   hunting: null,      // a search term, which takes over the sheet
   data: {},
+  simple: false,      // the rail is trimmed to the worksheet screens
   flash: null,
   editingJob: null,
+  sheetOpen: null,    // the worksheet being read, rather than the day's list
+  sheetSpan: 'day',   // 'day' or 'week' — how many sheets are listed at once
+  sheetEdit: false,   // its fields are open for typing
+  partOpen: false,    // the add-a-part row is showing
 };
 
 /* ----------------------------- loading ---------------------------- */
@@ -67,6 +85,11 @@ function fetchTab() {
   if (view.tab === 'reports') {
     return api('/api/office/reports?from=' + view.repFrom + '&to=' + view.repTo);
   }
+  if (view.tab === 'worksheets') {
+    if (view.sheetOpen) return api('/api/office/worksheets/' + view.sheetOpen);
+    var upto = view.sheetSpan === 'week' ? shiftDate(view.day, 6) : view.day;
+    return api('/api/office/worksheets?from=' + view.day + '&to=' + upto);
+  }
   if (view.tab === 'notices') return api('/api/office/notices');
   if (view.tab === 'backups') return api('/api/office/backups');
   if (view.tab === 'crew') return api('/api/office/people?include_past=1');
@@ -90,9 +113,21 @@ function load() {
   return Promise.all([fetchTab()].concat(also)).then(function (all) {
     var data = all[0];
     view.data = data;
+    if (typeof data.simple === 'boolean') view.simple = data.simple;
+
+    // Landing on a screen that has been put away would leave somebody looking
+    // at a tab the rail no longer shows. Settles in one step: worksheets is
+    // always one of the six.
+    if (view.simple && !view.hunting && tabsShowing().indexOf(view.tab) < 0) {
+      view.tab = 'worksheets';
+      return load();
+    }
     if (data.people) view.people = data.people;
     if (data.customers && !view.openCustomer) view.customers = data.customers;
     paintCounts(data.counts);
+    // The rail's shape comes back with the screen, so it is set here rather
+    // than only when somebody presses a tab.
+    markTab();
     paint();
   }).catch(function (err) { say(err.message, 'bad'); });
 }
@@ -163,6 +198,9 @@ function goTab(tab) {
   view.looked = null;
   view.copying = null;
   view.hunting = null;
+  view.sheetOpen = null;
+  view.sheetEdit = false;
+  view.partOpen = false;
 
   var box = document.getElementById('search');
   if (box) box.value = '';
@@ -183,9 +221,25 @@ function nameScreen() {
 }
 
 function markTab() {
+  var showing = tabsShowing();
+
   TABS.forEach(function (t) {
-    document.getElementById('tab-' + t)
-      .setAttribute('aria-selected', String(!view.hunting && t === view.tab));
+    var button = document.getElementById('tab-' + t);
+    if (!button) return;
+    button.hidden = showing.indexOf(t) < 0;
+    button.setAttribute('aria-selected', String(!view.hunting && t === view.tab));
+  });
+
+  // A heading over nothing is worse than no heading.
+  var heads = document.querySelectorAll('.railgroup');
+  Array.prototype.forEach.call(heads, function (head) {
+    var any = false;
+    var next = head.nextElementSibling;
+    while (next && next.tagName === 'BUTTON') {
+      if (!next.hidden) { any = true; break; }
+      next = next.nextElementSibling;
+    }
+    head.hidden = !any;
   });
 
   nameScreen();
@@ -196,7 +250,8 @@ function markTab() {
 function paint() {
   var sheet = emptyOut(document.getElementById('sheet'));
 
-  if (view.tab === 'today' || view.tab === 'jobs') {
+  if (view.tab === 'today' || view.tab === 'jobs'
+      || (view.tab === 'worksheets' && !view.sheetOpen)) {
     sheet.appendChild(make('div', { class: 'daybar' },
       make('h1', {}, longDate(view.day), view.day !== today() && make('em', { text: 'not today' })),
       view.day !== today() && make('button', {
@@ -226,6 +281,7 @@ function paint() {
     notices: paintNotices,
     crew: paintCrew,
     pay: paintPay,
+    worksheets: paintWorksheets,
     backups: paintBackups,
   })[view.tab](sheet);
 }
@@ -1947,6 +2003,426 @@ function setWorking(p, active) {
 }
 
 /* ------------------------------ payroll --------------------------- */
+
+/* ----------------------------- worksheets ------------------------------- */
+
+/*
+ * What happened at a property on a day, read as one thing.
+ *
+ * All of this already existed — a job, the hours against it, the parts — but
+ * scattered across three screens and never in a shape anybody could hand over.
+ * A worksheet is that job read as a document: numbered, honest about what is
+ * still blank, and printable without retyping a word of it.
+ */
+
+var TRADE_WORDS = {
+  sprinkler: 'Sprinkler',
+  lighting: 'Landscape lighting',
+  drainage: 'Drainage',
+  other: 'Other work'
+};
+
+function paintWorksheets(box) {
+  if (view.sheetOpen) { paintOneSheet(box, view.data.sheet); return; }
+
+  var d = view.data;
+  var sheets = d.sheets || [];
+  var t = d.totals || { sheets: 0, hours: 0, people: 0, needing: 0 };
+
+  box.appendChild(make('div', { class: 'card' }, figures([
+    { value: String(t.sheets), label: t.sheets === 1 ? 'worksheet' : 'worksheets' },
+    { value: String(t.hours), label: 'hours on them' },
+    { value: String(t.people), label: t.people === 1 ? 'person out' : 'people out' },
+    { value: String(t.needing), label: 'still to fill in' }
+  ])));
+
+  box.appendChild(make('div', { class: 'inline', style: 'margin-bottom:16px' },
+    make('button', { class: view.sheetSpan === 'day' ? 'go slim' : 'slim', style: 'margin:0',
+      'aria-pressed': String(view.sheetSpan === 'day'),
+      onclick: function () { view.sheetSpan = 'day'; load(); } }, 'This day'),
+    make('button', { class: view.sheetSpan === 'week' ? 'go slim' : 'slim', style: 'margin:0',
+      'aria-pressed': String(view.sheetSpan === 'week'),
+      onclick: function () { view.sheetSpan = 'week'; load(); } }, 'The next seven days'),
+    sheets.length && make('button', { class: 'slim', style: 'margin:0',
+      onclick: function () { printSheets(sheets); } },
+      sheets.length === 1 ? 'Print it' : 'Print all ' + sheets.length)));
+
+  if (!sheets.length) {
+    box.appendChild(panel('Worksheets', [], make('div', { class: 'pad' },
+      make('p', { class: 'none', text: view.sheetSpan === 'week'
+        ? 'No work booked in over these seven days.'
+        : 'Nothing booked in for this day. Put work in on Schedule and a worksheet '
+          + 'starts itself.' }))));
+    box.appendChild(simpleSwitch());
+    return;
+  }
+
+  // Grouped by day, because a week of sheets in one list is a wall.
+  var days = [];
+  var byDay = {};
+  sheets.forEach(function (s) {
+    if (!byDay[s.date]) { byDay[s.date] = []; days.push(s.date); }
+    byDay[s.date].push(s);
+  });
+
+  days.forEach(function (day) {
+    var mine = byDay[day];
+    var hours = mine.reduce(function (n, s) { return n + s.hours; }, 0);
+
+    box.appendChild(panel(
+      view.sheetSpan === 'week' ? longDate(day) : 'Worksheets',
+      [make('span', { class: 'pip', text: Math.round(hours * 100) / 100 + ' hrs' })],
+      make('ul', { class: 'sheets' }, mine.map(sheetRow))));
+  });
+
+  box.appendChild(simpleSwitch());
+}
+
+/** One line in the list: enough to know whether it needs you. */
+function simpleSwitch() {
+  var on = simpleNow();
+
+  return panel(on ? 'This app is set to worksheets only' : 'Only want the worksheets?', [],
+    make('div', { class: 'pad' },
+      make('p', { class: 'warnline', text: on
+        ? 'The rail is showing the six screens worksheets need. Quotes, billing, '
+          + 'expenses, reports, payroll and notices are put away \u2014 nothing in them '
+          + 'has been touched, and they come straight back.'
+        : 'If worksheets are all this is for, the rail can drop to the six screens '
+          + 'they need: worksheets, the work they come from, hours, customers, the '
+          + 'team and backups. Nothing is deleted, and one press brings it all back.' }),
+      make('button', { class: on ? 'slim' : 'go slim', style: 'margin:0', onclick: function () {
+        then(api('/api/office/simple-mode', { method: 'POST', body: { only: !on } }),
+          on ? 'Everything is back.' : 'Trimmed down to worksheets.');
+      } }, on ? 'Show me everything again' : 'Keep it to worksheets')));
+}
+
+function sheetRow(s) {
+  return make('li', {},
+    make('button', { class: 'sheetpick', onclick: function () {
+      view.sheetOpen = s.job_id;
+      view.sheetEdit = false;
+      view.partOpen = false;
+      load();
+    } },
+      make('span', { class: 'bar ' + s.status }),
+      make('span', {},
+        make('span', { class: 'headline' },
+          make('h3', { text: s.customer }),
+          make('span', { class: 'kind ' + s.kind, text: TRADE_WORDS[s.kind] || 'Other work' })),
+        make('span', { class: 'metaline' },
+          make('span', { class: 'num', text: s.no }),
+          make('span', { class: 'gap', text: '·' }),
+          s.address,
+          s.people.length && make('span', { class: 'gap', text: '·' }),
+          s.people.length && (s.people.length === 1
+            ? s.people[0].name
+            : s.people.length + ' out'),
+          s.hours > 0 && make('span', { class: 'gap', text: '·' }),
+          s.hours > 0 && (s.hours + ' hrs')),
+        make('span', { class: 'sheetstate ' + (s.ready ? 'ready' : 'needing'),
+          text: s.words })),
+      make('span', { class: 'opener' }, 'Open', make('span', { class: 'chev' }, '›'))));
+}
+
+/* ------------------------- one sheet, as a document --------------------- */
+
+function paintOneSheet(box, s) {
+  if (!s) { box.appendChild(make('p', { class: 'none', text: 'That worksheet is gone.' })); return; }
+
+  box.appendChild(make('div', { class: 'backrow' },
+    make('button', { onclick: function () {
+      view.sheetOpen = null; view.sheetEdit = false; view.partOpen = false; load();
+    } }, '‹ Back to worksheets')));
+
+  if (s.missing.length) {
+    box.appendChild(make('div', { class: 'needsyou' },
+      make('b', { text: s.missing.length === 1
+        ? s.missing[0]
+        : 'This sheet still needs ' + s.missing.length + ' things' }),
+      !view.sheetEdit && make('button', { class: 'go slim', style: 'margin:0',
+        onclick: function () { view.sheetEdit = true; paint(); } }, 'Fill it in')));
+  }
+
+  box.appendChild(theSheet(s));
+
+  box.appendChild(make('div', { class: 'inline', style: 'margin-top:4px' },
+    make('button', { class: 'slim', style: 'margin:0',
+      onclick: function () { printSheets([s]); } }, 'Print this worksheet'),
+    !view.sheetEdit && make('button', { class: 'slim', style: 'margin:0',
+      onclick: function () { view.sheetEdit = true; paint(); } }, 'Change what it says')));
+
+  if (view.sheetEdit) box.appendChild(sheetForm(s));
+}
+
+/**
+ * The sheet itself. Laid out as a document rather than a form, because this is
+ * the thing that gets printed, filed and handed over.
+ */
+function theSheet(s) {
+  return make('article', { class: 'worksheet' },
+    make('header', { class: 'ws-top' },
+      make('div', {},
+        make('b', { text: 'Custom Outdoor Design' }),
+        make('i', { text: 'Sprinkler · Landscape lighting · Drainage' })),
+      make('div', { class: 'ws-no' },
+        make('b', { text: s.no }),
+        make('i', { text: longDate(s.date) }))),
+
+    make('div', { class: 'ws-who' },
+      wsField('Customer', s.customer),
+      wsField('Where', s.address || '—'),
+      wsField('Phone', s.phone || '—'),
+      wsField('Type of work', s.kind_words)),
+
+    s.asked_for && wsBlock('What we were called for', s.asked_for),
+
+    make('div', { class: 'ws-part' },
+      make('h4', { text: 'Who was there' }),
+      s.people.length
+        ? make('table', { class: 'ws-table' },
+            make('thead', {}, make('tr', {},
+              make('th', { text: 'Name' }),
+              make('th', { text: 'On' }),
+              make('th', { text: 'Off' }),
+              make('th', { class: 'r', text: 'Break' }),
+              make('th', { class: 'r', text: 'Hours' }))),
+            make('tbody', {}, s.people.map(function (p) {
+              return make('tr', {},
+                make('td', { text: p.name }),
+                make('td', { class: 'num', text: p.start }),
+                make('td', { class: 'num', text: p.end || 'still on' }),
+                make('td', { class: 'r', text: p.break_minutes ? p.break_minutes + 'm' : '—' }),
+                make('td', { class: 'r', text: p.hours == null ? '—' : String(p.hours) }));
+            })),
+            make('tfoot', {}, make('tr', {},
+              make('td', { colspan: '4', text: 'Total hours' }),
+              make('td', { class: 'r', text: String(s.hours) }))))
+        : make('p', { class: 'ws-blank', text: 'Nobody has put hours against this yet.' })),
+
+    make('div', { class: 'ws-part' },
+      make('h4', { text: 'What was done' }),
+      s.done
+        ? make('p', { class: 'ws-body', text: s.done })
+        : make('p', { class: 'ws-blank', text: 'Not written down yet.' })),
+
+    make('div', { class: 'ws-part' },
+      make('h4', { text: 'Parts and materials' }),
+      s.materials.length
+        ? make('ul', { class: 'ws-parts' }, s.materials.map(function (m) {
+            return make('li', {},
+              make('span', { class: 'num', text: tidyQty(m.quantity)
+                + (m.unit ? ' ' + m.unit : '') }),
+              make('span', { text: m.item }),
+              view.sheetEdit && make('button', { class: 'asLink', onclick: function () {
+                then(api('/api/office/worksheets/' + s.job_id + '/parts/' + m.id,
+                  { method: 'DELETE' }), 'Taken off.');
+              } }, 'take off'));
+          }))
+        : s.done_materials_text
+          ? make('p', { class: 'ws-body', text: s.done_materials_text })
+          : make('p', { class: 'ws-blank', text: 'Nothing written down.' }),
+      view.sheetEdit && partAdder(s)),
+
+    s.next_visit && wsBlock('To come back for', s.next_visit),
+
+    make('footer', { class: 'ws-sign' },
+      make('div', {},
+        make('i', { text: 'Signed off by' }),
+        make('b', { text: s.signed_by || '' }),
+        make('span', { class: 'ws-rule' })),
+      make('div', {},
+        make('i', { text: 'Date' }),
+        make('b', { text: s.signed_at ? shortDate(s.signed_at.slice(0, 10)) : '' }),
+        make('span', { class: 'ws-rule' }))));
+}
+
+function wsField(label, value) {
+  return make('div', {}, make('i', { text: label }), make('b', { text: value }));
+}
+
+function wsBlock(title, body) {
+  return make('div', { class: 'ws-part' },
+    make('h4', { text: title }),
+    make('p', { class: 'ws-body', text: body }));
+}
+
+function tidyQty(n) {
+  return String(Math.round((Number(n) || 0) * 100) / 100);
+}
+
+/* ------------------------------- filling in ----------------------------- */
+
+function partAdder(s) {
+  var usual = (view.data.usual_parts || []).slice(0, 12);
+
+  var what = make('input', { id: 'ws-item', maxlength: '160', placeholder: 'Rain Bird 5004' });
+  var many = make('input', { type: 'number', id: 'ws-qty', min: '0', step: '0.25', value: '1' });
+  var unit = make('input', { id: 'ws-unit', maxlength: '24', placeholder: 'ft, bags, none' });
+
+  var put = function () {
+    if (!what.value.trim()) { say('Say what the part was.', 'bad'); return; }
+    then(api('/api/office/worksheets/' + s.job_id + '/parts', {
+      method: 'POST',
+      body: { item: what.value.trim(), quantity: Number(many.value) || 1, unit: unit.value.trim() }
+    }), 'Put on the sheet.');
+  };
+
+  return make('div', { class: 'partadd' },
+    usual.length && make('div', { class: 'picks' }, usual.map(function (u) {
+      return make('button', { type: 'button', class: 'slim', onclick: function () {
+        what.value = u.item;
+        unit.value = u.unit || '';
+        many.focus();
+      } }, u.item);
+    })),
+    make('div', { class: 'partrow' },
+      make('div', {}, make('label', { for: 'ws-item', text: 'What' }), what),
+      make('div', {}, make('label', { for: 'ws-qty', text: 'How many' }), many),
+      make('div', {}, make('label', { for: 'ws-unit', text: 'Measured in' }), unit)),
+    make('button', { class: 'go slim', style: 'margin:0', onclick: put }, 'Add this part'));
+}
+
+function sheetForm(s) {
+  var done = make('textarea', { id: 'ws-done', maxlength: '2000',
+    placeholder: 'Dug out and replaced the zone 3 valve. Flushed the line and reset the timer.' });
+  done.value = s.done || '';
+
+  var next = make('input', { id: 'ws-next', maxlength: '500',
+    placeholder: 'Check the timer in spring' });
+  next.value = s.next_visit || '';
+
+  var signed = make('input', { id: 'ws-signed', maxlength: '120',
+    placeholder: 'Whoever was home' });
+  signed.value = s.signed_by || '';
+
+  return panel('Fill in the worksheet', [], make('div', { class: 'pad' },
+    make('div', { class: 'field' },
+      make('label', { for: 'ws-done', text: 'What was done' }), done),
+    make('div', { class: 'two', style: 'margin-bottom:12px' },
+      make('div', {},
+        make('label', { for: 'ws-next', text: 'Anything to come back for?' }), next),
+      make('div', {},
+        make('label', { for: 'ws-signed', text: 'Signed off by' }), signed)),
+    make('div', { class: 'inline' },
+      make('button', { class: 'go', onclick: function () {
+        view.sheetEdit = false;
+        then(api('/api/office/worksheets/' + s.job_id, {
+          method: 'PATCH',
+          body: { done: done.value.trim(), next_visit: next.value.trim(),
+                  signed_by: signed.value.trim() }
+        }), 'Worksheet saved.');
+      } }, 'Save the worksheet'),
+      make('button', { onclick: function () { view.sheetEdit = false; paint(); } },
+        'Never mind'))));
+}
+
+/* --------------------------------- printing ----------------------------- */
+
+/*
+ * Printing goes through a window of its own rather than the screen behind it:
+ * one sheet per page, nothing from the app around it, and the tab the office
+ * was working in is left exactly as it was.
+ */
+function printSheets(list) {
+  var frame = document.getElementById('printer');
+  if (!frame) {
+    frame = make('iframe', { id: 'printer', 'aria-hidden': 'true', title: 'Printing' });
+    document.body.appendChild(frame);
+  }
+
+  var doc = frame.contentDocument;
+  doc.open();
+  doc.write('<!doctype html><html><head><meta charset="utf-8"><title>Worksheets</title></head>'
+    + '<body></body></html>');
+  doc.close();
+
+  var style = doc.createElement('style');
+  style.textContent = printStyles();
+  doc.head.appendChild(style);
+
+  list.forEach(function (s, i) {
+    var page = theSheetFor(doc, s);
+    page.className += i < list.length - 1 ? ' ws-break' : '';
+    doc.body.appendChild(page);
+  });
+
+  frame.contentWindow.focus();
+  frame.contentWindow.print();
+}
+
+/*
+ * What a worksheet looks like on paper. Written out here rather than shared
+ * with the screen, because paper wants none of what a screen wants: no
+ * colour to waste ink on, no hover, no dark mode, and hard page breaks.
+ */
+function printStyles() {
+  return [
+    '@page { size: A4 portrait; margin: 16mm 14mm; }',
+    '* { box-sizing: border-box; }',
+    'body { margin: 0; font: 11pt/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI",',
+    '  Roboto, Helvetica, Arial, sans-serif; color: #000; background: #fff; }',
+
+    '.worksheet { border: 1px solid #000; padding: 8mm; }',
+    '.ws-break { page-break-after: always; break-after: page; }',
+
+    '.ws-top { display: flex; justify-content: space-between; align-items: flex-start;',
+    '  gap: 10mm; padding-bottom: 4mm; border-bottom: 1.5pt solid #000; margin-bottom: 5mm; }',
+    '.ws-top b { display: block; font-size: 14pt; letter-spacing: -.01em; }',
+    '.ws-top i { display: block; font-style: normal; font-size: 8.5pt;',
+    '  letter-spacing: .08em; text-transform: uppercase; color: #444; margin-top: 1mm; }',
+    '.ws-no { text-align: right; white-space: nowrap; }',
+    '.ws-no b { font-size: 13pt; font-variant-numeric: tabular-nums; }',
+
+    '.ws-who { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 8mm;',
+    '  margin-bottom: 5mm; }',
+    '.ws-who i { display: block; font-style: normal; font-size: 8pt;',
+    '  letter-spacing: .07em; text-transform: uppercase; color: #555; }',
+    '.ws-who b { display: block; font-size: 11.5pt; font-weight: 600; }',
+
+    '.ws-part { margin-bottom: 5mm; page-break-inside: avoid; break-inside: avoid; }',
+    '.ws-part h4 { margin: 0 0 2mm; font-size: 8.5pt; letter-spacing: .07em;',
+    '  text-transform: uppercase; color: #555; border-bottom: .5pt solid #999;',
+    '  padding-bottom: 1mm; }',
+    '.ws-body { margin: 0; white-space: pre-wrap; }',
+    '.ws-blank { margin: 0; color: #777; font-style: italic; }',
+
+    '.ws-table { width: 100%; border-collapse: collapse; font-size: 10.5pt; }',
+    '.ws-table th, .ws-table td { text-align: left; padding: 1.6mm 2mm;',
+    '  border-bottom: .5pt solid #bbb; }',
+    '.ws-table th { font-size: 8pt; letter-spacing: .06em; text-transform: uppercase;',
+    '  color: #555; }',
+    '.ws-table .r, .ws-table th.r { text-align: right; }',
+    '.ws-table .num, .ws-table .r { font-variant-numeric: tabular-nums; }',
+    '.ws-table tfoot td { border-bottom: 0; border-top: 1pt solid #000; font-weight: 700; }',
+
+    '.ws-parts { margin: 0; padding: 0; list-style: none; }',
+    '.ws-parts li { display: flex; gap: 4mm; padding: 1.4mm 0;',
+    '  border-bottom: .5pt dotted #bbb; }',
+    '.ws-parts li .num { min-width: 22mm; font-variant-numeric: tabular-nums;',
+    '  font-weight: 600; }',
+    '.ws-parts button { display: none; }',
+
+    '.ws-sign { display: grid; grid-template-columns: 2fr 1fr; gap: 10mm;',
+    '  margin-top: 8mm; padding-top: 4mm; border-top: 1pt solid #000;',
+    '  page-break-inside: avoid; break-inside: avoid; }',
+    '.ws-sign i { display: block; font-style: normal; font-size: 8pt;',
+    '  letter-spacing: .07em; text-transform: uppercase; color: #555; }',
+    '.ws-sign b { display: block; min-height: 7mm; font-size: 12pt; font-weight: 600;',
+    '  padding-top: 2mm; }',
+    '.ws-rule { display: block; border-top: .75pt solid #000; }'
+  ].join('\n');
+}
+
+/* The same document, built into the printing window rather than this one. */
+function theSheetFor(doc, s) {
+  var here = document.createElement('div');
+  var was = view.sheetEdit;
+  view.sheetEdit = false;              // no "take off" buttons on paper
+  here.appendChild(theSheet(s));
+  view.sheetEdit = was;
+  return doc.importNode(here.firstChild, true);
+}
 
 /* ------------------------------- backups -------------------------------- */
 

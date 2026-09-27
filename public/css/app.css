@@ -451,6 +451,7 @@ a { color: var(--accent); }
 /* Each section keeps a colour of its own, so the rail is learned by eye
    rather than read every time. */
 #tab-today     svg { color: var(--warn); }
+#tab-worksheets svg { color: var(--brand); }
 #tab-week      svg { color: var(--other); }
 #tab-hours     svg { color: var(--live); }
 #tab-jobs      svg { color: var(--sprinkler); }
@@ -1510,6 +1511,265 @@ a.linkout {
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* ============================== worksheets ============================= */
+
+/* The list: one line per sheet, and the line says whether it needs you. */
+.sheets { list-style: none; margin: 0; padding: 0; }
+.sheets > li { border-top: 1px solid var(--line); }
+.sheets > li:first-child { border-top: 0; }
+
+.sheets .sheetpick {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  gap: 0 var(--s3);
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  min-height: 0;
+  padding: var(--s3) var(--s4);
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-weight: 400;
+  font-size: var(--t-body);
+}
+
+.sheets .sheetpick:hover { background: var(--surface-2); }
+.sheets .sheetpick .bar { align-self: stretch; min-height: 34px; }
+.sheets .sheetpick h3 { font-size: var(--t-body); font-weight: 650; }
+.sheets .sheetpick .headline { margin-bottom: 2px; }
+.sheets .sheetpick:hover .chev { color: var(--accent); }
+
+.sheetstate {
+  display: block;
+  margin-top: 3px;
+  font-size: var(--t-small);
+  font-weight: 600;
+}
+
+.sheetstate.ready { color: var(--done); }
+.sheetstate.needing { color: var(--warn); }
+
+/* ------------------------- the sheet as a document --------------------- */
+
+/*
+ * This one is not a card. A worksheet is a piece of paper that happens to be
+ * on a screen at the moment: a ruled sheet, a number in the corner, and a
+ * line at the bottom for somebody's name. What prints is what is here.
+ */
+.worksheet {
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  padding: var(--s5);
+  margin-bottom: var(--s4);
+}
+
+.ws-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  padding-bottom: var(--s3);
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: var(--s4);
+}
+
+.ws-top b {
+  display: block;
+  font-size: var(--t-title);
+  font-weight: 650;
+  letter-spacing: -.02em;
+}
+
+.ws-top i {
+  display: block;
+  font-style: normal;
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+
+.ws-no { text-align: right; white-space: nowrap; }
+.ws-no b { font-size: var(--t-lead); font-variant-numeric: tabular-nums; color: var(--brand-2); }
+
+.ws-who {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s3) var(--s5);
+  margin-bottom: var(--s5);
+}
+
+.ws-who i {
+  display: block;
+  font-style: normal;
+  font-size: var(--t-micro);
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.ws-who b { display: block; font-size: var(--t-lead); font-weight: 600; }
+
+@media (max-width: 560px) { .ws-who { grid-template-columns: 1fr; } }
+
+.ws-part { margin-bottom: var(--s5); }
+
+.ws-part h4 {
+  margin-bottom: var(--s2);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.ws-body { white-space: pre-wrap; line-height: 1.6; }
+.ws-blank { color: var(--ink-3); font-style: italic; }
+
+.ws-table { width: 100%; border-collapse: collapse; font-size: var(--t-body); }
+.ws-table th, .ws-table td { padding: 7px var(--s2); border-bottom: 1px solid var(--line); }
+.ws-table tfoot td { border-bottom: 0; border-top: 1px solid var(--ink); font-weight: 700; }
+
+.ws-parts { list-style: none; margin: 0; padding: 0; }
+
+.ws-parts li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  padding: 6px 0;
+  border-bottom: 1px dotted var(--line-2);
+}
+
+.ws-parts li .num { min-width: 78px; font-weight: 650; }
+
+.ws-sign {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--s5);
+  margin-top: var(--s6);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--ink);
+}
+
+.ws-sign i {
+  display: block;
+  font-style: normal;
+  font-size: var(--t-micro);
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.ws-sign b {
+  display: block;
+  min-height: 28px;
+  padding-top: 6px;
+  font-size: var(--t-lead);
+  font-weight: 600;
+}
+
+.ws-rule { display: block; border-top: 1px solid var(--line-3); }
+
+/* ------------------------ parts, from the phone ------------------------ */
+
+.partlist { list-style: none; margin: 0 0 var(--s3); padding: 0; }
+
+.partlist li {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.partlist li:first-child { border-top: 1px solid var(--line); }
+
+.partlist .num {
+  flex: none;
+  min-width: 68px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.partlist .what { flex: 1; min-width: 0; font-weight: 600; }
+
+/*
+ * How many, without typing. A number pad in the sun with wet gloves on is how
+ * somebody puts 111 spray heads on a sheet.
+ */
+.counter {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.counter b {
+  flex: 1;
+  text-align: center;
+  font-size: var(--t-head);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 0 var(--s2);
+  min-height: var(--ctl);
+  line-height: var(--ctl);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.counter .stepper {
+  width: auto;
+  margin: 0;
+  flex: none;
+  min-width: 56px;
+  min-height: var(--ctl);
+  font-size: var(--t-head);
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+}
+
+body.crew .counter .stepper { min-width: 72px; min-height: 56px; }
+body.crew .counter b { min-height: 56px; line-height: 56px; font-size: var(--t-big); }
+
+/* ---------------------------- putting parts on ------------------------- */
+
+.partadd {
+  margin-top: var(--s3);
+  padding: var(--s3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.partadd .picks { margin-bottom: var(--s3); }
+.partadd .picks button { flex: 0 1 auto; }
+
+.partrow { display: grid; gap: var(--s2); margin-bottom: var(--s3); }
+
+@media (min-width: 620px) {
+  .partrow { grid-template-columns: 2fr 1fr 1fr; }
+}
+
+/* The window printing happens in is never meant to be looked at. */
+#printer {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 0;
+  visibility: hidden;
 }
 
 /* =============================== backups ============================== */
